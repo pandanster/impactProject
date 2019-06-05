@@ -61,13 +61,18 @@ def cloudPointCluster(inFile,inProximity,pointCount,distance,pltTitle,pltType='3
 					plt.show()
 				else:
 					ax=fig.add_subplot(111)
-					ax.set_xlabel('x')
-					ax.set_ylabel('y')
+
 					if axis=='xy' or axis == None:
+						ax.set_xlabel('x')
+						ax.set_ylabel('y')
 						x=np.array([[x,y] for x,y in zip(data_x,data_y)])
 					elif axis == 'yz':
+						ax.set_xlabel('y')
+						ax.set_ylabel('z')
 						x=np.array([[x,y] for x,y in zip(data_y,data_z)])
 					elif axis == 'xz':
+						ax.set_xlabel('x')
+						ax.set_ylabel('z')
 						x=np.array([[x,y] for x,y in zip(data_x,data_z)])
 					x=x.reshape(-1,2)
 					cluster=db.fit(x)
