@@ -130,5 +130,34 @@ def sensorDataVisualize(inFile,plotType=None,smooth=False,window=None):
 				ax.plot(inFile[:,i+2],label='z')
 			plt.legend()
 			plt.show()
+
+'''
+Example for filtering Data
+Assumed sampling rate is 100 Hz
+Filter order is 6, low pass with frequency of 2 Hz ripple .01 and 
+stop band attenuation of 30
+'''
+def FilterExample(inFile):
+	b1,a1=build_filter(6,2,None,'lowpass',100,'ellip',.01,30)
+	inFile=open(inFile,'r')
+	inFile=inFile.readlines()
+	inFile=inFile[1:]
+	inFile=[f.strip().split(',') for f in inFile]
+	inFile=[[float(x) for x in f[:-1]] for f in inFile]
+	inFile=np.array(inFile)
+	plt.plot(inFile[:,0],label='x')
+	plt.plot(inFile[:,1],label='y')
+	plt.plot(inFile[:,2],label='z')
+	plt.title('Before Filter')
+	plt.legend()
+	plt.show()
+	plt.plot(FilterData(b1,a1,inFile[:,0]),label='x')
+	plt.plot(FilterData(b1,a1,inFile[:,1]),label='y')
+	plt.plot(FilterData(b1,a1,inFile[:,2]),label='z')
+	plt.title('Before Filter')
+	plt.legend()
+	plt.show()
+
+			
 #sensorDataVisualize('Sensor_record_20190515_161127_AndroSensor.csv',plotType='3D',smooth=True,window=10)
-b1,a1=build_filter(6,1000,None,'lowpass',8000,'ellip',.01,None)
+FilterExample('Sensor_record_20190515_161127_AndroSensor.csv')
