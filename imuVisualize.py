@@ -22,8 +22,68 @@ Applies a filter for the given sequence takes three parameters
 returns the filtered Data
 '''
 
-def FilterData():
-	
+def FilterData(b,a,data):
+	return filtfilt(b,a,data)	
+'''
+Function to build a digital filter
+Takes the following parameters
+@Order of the filter to be designed
+@pass_band the pass band frequency
+@stop_band the stop band frequency
+@fs - sampling rate of the signal Number of samples per second
+@ripple - How much is the tolearble ripple in the pass band  
+@attenuation - How much is the tolerable ripple in the stop band if None will generate plots for different attenuation values
+'''
+def build_filter(Order,pass_band,stop_band,band,fs,filter,ripple,attenuation,plot=False):
+	nyq=fs/2
+	if band== 'bandpass':
+		pass_low=pass_band/nyq
+		pass_high=stop_band/nyq
+		stop_low=pass_low*0.8
+		stop_high=pass_high/0.8
+		wn=[pass_low,pass_high]
+	elif band== 'lowpass': 
+		wn=pass_band/nyq
+	elif band=='highpass':
+		wn=pass_band/nyq
+	else:
+		return None
+	if attenuation!=None:
+		b,a = iirfilter(Order,Wn=wn,btype=band,rp=ripple,rs=attenuation,ftype=filter)
+		w,h =freqz(b,a)
+		if plot==True:
+			plt.plot((nyq/np.pi)*w,abs(h))
+			plt.title(filter+' filter frequency response')
+			plt.xlabel('Frequency')
+			plt.ylabel('Amplitude')
+			plt.grid(True)
+			plt.legend(loc='best')
+			plt.show()
+	elif Order !=None:
+		for i in [10,30,40,60,80]:
+			b,a = iirfilter(Order,Wn=wn,btype=band,rp=.05,rs=i,ftype=filter)
+			w,h =freqz(b,a)
+			plt.plot((nyq/np.pi)*w,abs(h),label='stop band attenuation= %d' % i)
+		plt.title(filter+' filter frequency response')
+		plt.xlabel('Frequency')
+		plt.ylabel('Amplitude')
+		plt.grid(True)
+		plt.legend(loc='best')
+		plt.show()
+	elif attenuation==None:
+		for i in [2,4,6]:
+			b,a = iirfilter(i,Wn=wn,btype=band,rp=.01,rs=40,ftype=filter)
+			w,h =freqz(b,a)
+			plt.plot((nyq/np.pi)*w,abs(h),label='Order= %d' % i)
+		plt.title(filter+' filter frequency response')
+		plt.xlabel('Frequency')
+		plt.ylabel('Amplitude')
+		plt.grid(True)
+		plt.legend(loc='best')
+		plt.show()
+	return (b,a)
+		
+				
 '''
 Takes five parameters
 @param inFile - The input File that contains the captured data
@@ -70,6 +130,5 @@ def sensorDataVisualize(inFile,plotType=None,smooth=False,window=None):
 				ax.plot(inFile[:,i+2],label='z')
 			plt.legend()
 			plt.show()
-x=[1,2,3,4,5,6,6,7,7,2,2,5,2,4]
-#print(movingAvg(x,2))			
-sensorDataVisualize('Sensor_record_20190515_161127_AndroSensor.csv',plotType='3D',smooth=True,window=10)
+#sensorDataVisualize('Sensor_record_20190515_161127_AndroSensor.csv',plotType='3D',smooth=True,window=10)
+b1,a1=build_filter(6,1000,None,'lowpass',8000,'ellip',.01,None)
