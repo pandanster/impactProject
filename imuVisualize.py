@@ -136,6 +136,8 @@ Example for filtering Data
 Assumed sampling rate is 100 Hz
 Filter order is 6, low pass with frequency of 2 Hz ripple .01 and 
 stop band attenuation of 30
+The parameter 2 is the frequency for which you are filtering
+The parameter 5 is your sampling rate
 '''
 def FilterExample(inFile):
 	b1,a1=build_filter(6,2,None,'lowpass',100,'ellip',.01,30)
