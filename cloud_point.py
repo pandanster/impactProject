@@ -1,9 +1,13 @@
 import numpy as np
+import glob
+import os
 import matplotlib.pyplot as plt
 import datetime
 from mpl_toolkits.mplot3d import Axes3D
 from sklearn.cluster import DBSCAN
 from sklearn import metrics
+from scipy.spatial import ConvexHull
+from  sklearn.cluster import AgglomerativeClustering
 
 def getTimeDiff(date1,date2):
 	date1=date1/1000
@@ -12,6 +16,18 @@ def getTimeDiff(date1,date2):
 	date2=datetime.datetime.fromtimestamp(date2)
 	delta=date2-date1
 	return divmod(delta.total_seconds(),60)[1]
+
+def getConvexHull(points):
+	pts=np.array([[0, 0, 0], [1, 1, 1], [1, 1, 0], [0, 1, 0],[0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1], ])
+	hull=ConvexHull(pts)
+	print(hull.area)
+	fig=plt.figure()
+	ax=fig.add_subplot(111,projection='3d')
+	ax.plot(pts.T[0], pts.T[1], pts.T[2], "ko")
+	for s in hull.simplices:
+		s=np.append(s,s[0])
+		ax.plot(pts[s,0],pts[s,1],pts[s,2],"r-")
+	plt.show()
 '''
 Takes five parameters
 @param inFile - The input File that contains the captured data
@@ -22,7 +38,6 @@ Takes five parameters
 @return None
 Displays the 3D projections of the points
 '''
-
 def cloudPointCluster(inFile,inProximity,pointCount,distance,pltTitle,pltType='3d',saveDir=None,axis=None):
 	inFile=open(inFile,'r')
 	lines=inFile.readlines()
@@ -34,6 +49,7 @@ def cloudPointCluster(inFile,inProximity,pointCount,distance,pltTitle,pltType='3
 	currTime=None
 	count=0
 	db=DBSCAN(eps=distance)
+	#db=AgglomerativeClustering()
 	colors=['red','green','blue','orange','black','yellow','pink','brown','cyan','purple']
 	for line in lines:
 		line=[float(x.split('::')[1]) for x in line]
@@ -41,6 +57,11 @@ def cloudPointCluster(inFile,inProximity,pointCount,distance,pltTitle,pltType='3
 			currTime=line[-1]
 		elif getTimeDiff(int(currTime),int(line[-1])) > inProximity:
 			if len(data_x) > pointCount:
+				x=np.array([[x,y,z] for x,y,z in zip(data_x,data_y,data_z)])
+				x=x.reshape(-1,3)
+				cluster=db.fit(x)
+				pointLabels=cluster.labels_
+				labels=list(set(cluster.labels_))
 				fig=plt.figure()
 				fig.suptitle(pltTitle,fontsize=20)
 				if pltType=='3d':
@@ -48,16 +69,15 @@ def cloudPointCluster(inFile,inProximity,pointCount,distance,pltTitle,pltType='3
 					ax.set_xlabel('x')
 					ax.set_ylabel('y')
 					ax.set_zlabel('z')
-					x=np.array([data_x,data_y,data_z])
-					x=x.reshape(-1,3)
-					cluster=db.fit(x)
-					pointLabels=cluster.labels_
-					labels=list(set(cluster.labels_))
+					ax.set_xlim(0,1.5)
+					ax.set_ylim(-1,1)
+					ax.set_zlim(-1,1)
+
 					for u,label in enumerate(labels):	
 						indices=[i for i,j in enumerate(pointLabels) if j == label]
 						x_=x[indices]	
-						if label !=-1:
-							ax.scatter(x_[:,0],x_[:,1],x_[:,2],c=colors[u],marker='o')
+						#if label !=-1:
+						ax.scatter(x_[:,0],x_[:,1],x_[:,2],c=colors[u],marker='o')
 					plt.show()
 				else:
 					ax=fig.add_subplot(111)
@@ -65,24 +85,41 @@ def cloudPointCluster(inFile,inProximity,pointCount,distance,pltTitle,pltType='3
 					if axis=='xy' or axis == None:
 						ax.set_xlabel('x')
 						ax.set_ylabel('y')
-						x=np.array([[x,y] for x,y in zip(data_x,data_y)])
+						ax.set_xlim(0,1.5)
+						ax.set_ylim(-1,1)
+						i=0
+						j=1
+					#	x=np.array([[x,y] for x,y in zip(data_x,data_y)])
 					elif axis == 'yz':
 						ax.set_xlabel('y')
 						ax.set_ylabel('z')
-						x=np.array([[x,y] for x,y in zip(data_y,data_z)])
+						ax.set_xlim(-1,1)
+						ax.set_ylim(-1,1)
+					#	x=np.array([[x,y] for x,y in zip(data_y,data_z)])
+						i=1
+						j=2
 					elif axis == 'xz':
 						ax.set_xlabel('x')
 						ax.set_ylabel('z')
-						x=np.array([[x,y] for x,y in zip(data_x,data_z)])
-					x=x.reshape(-1,2)
-					cluster=db.fit(x)
-					pointLabels=cluster.labels_
-					labels=list(set(cluster.labels_))
+						ax.set_xlim(0,1.5)
+						ax.set_ylim(-1,1)
+						i=0
+						j=2
+					#	x=np.array([[x,y] for x,y in zip(data_x,data_z)])
+					
+					#x=x.reshape(-1,2)
+				#	cluster=db.fit(x)
+				#	pointLabels=cluster.labels_
+				#	labels=list(set(cluster.labels_))
 					for u,label in enumerate(labels):	
 						indices=[i for i,j in enumerate(pointLabels) if j == label]
 						x_=x[indices]	
 						if label !=-1:
-							ax.scatter(x_[:,0],x_[:,1],c=colors[u],marker='o')
+							try:
+								ax.scatter(x_[:,i],x_[:,j],c=colors[u],marker='o')
+							except Exception as e:
+								print(e)
+								print(u,currTime)
 
 					plt.savefig(saveDir+'/'+'Image-'+str(count)+'.jpeg')
 					count+=1
@@ -93,7 +130,7 @@ def cloudPointCluster(inFile,inProximity,pointCount,distance,pltTitle,pltType='3
 			data_inten=[]
 			currTime=line[-1]
 		else:
-			if line[0] <= 2:
+			if line[0] <= 1.5 and line[0] >= 0.3 and line[1] <= 0.6 and line[1] >=-0.6 and line[2]<=0.6 and line[2]>=-0.6:
 				data_x.append(line[0])
 				data_y.append(line[1])
 				data_z.append(line[2])
@@ -181,7 +218,7 @@ Takes four parameters
 Displays the 3D projections of the points
 '''
 
-def cloudPointVisualize(inFile,inProximity,pointCount,pltTitle,saveDir):
+def cloudPointVisualize(inFile,inProximity,pointCount,pltTitle,saveDir=None,pltType='3d',axis=None):
 	inFile=open(inFile,'r')
 	lines=inFile.readlines()
 	lines=[line.strip().split(' ') for line in lines]
@@ -200,13 +237,41 @@ def cloudPointVisualize(inFile,inProximity,pointCount,pltTitle,saveDir):
 				plt.clf()
 				fig=plt.figure()
 				fig.suptitle(pltTitle,fontsize=20)
-				ax=fig.add_subplot(111)
-				ax.set_xlabel('x')
-				ax.set_ylabel('y')
-#				ax.set_zlabel('z')
-				ax.scatter(data_x,data_y,c='r',marker='o')
-				plt.savefig(saveDir+'/'+'Image-'+str(count)+'.jpeg')
-				plt.close()
+				if pltType=='3d':
+					ax=fig.add_subplot(111,projection='3d')
+					ax.set_xlim(0,1.5)
+					ax.set_ylim(-1,1)
+					ax.set_zlim(-1,1)
+					ax.set_xlabel('x')
+					ax.set_ylabel('y')
+					ax.set_zlabel('z')
+					ax.scatter(data_x,data_y,data_z,c='r',marker='o')
+				else:
+					ax=fig.add_subplot(111)
+					if axis=='xy':
+						ax.set_xlabel('x')
+						ax.set_ylabel('y')
+						ax.set_xlim(0,1.5)
+						ax.set_ylim(-1,1)
+						ax.scatter(data_x,data_y,c='r',marker='o')
+					elif axis=='yz':
+						ax.set_xlabel('y')
+						ax.set_ylabel('z')
+						ax.set_xlim(-1,1)
+						ax.set_ylim(-1,1)
+						ax.scatter(data_y,data_z,c='r',marker='o')
+					else:
+						ax.set_xlabel('x')
+						ax.set_ylabel('z')
+						ax.set_xlim(0,1.5)
+						ax.set_ylim(-1,1)
+						ax.scatter(data_x,data_z,c='r',marker='o')
+						
+				if saveDir is None:
+					plt.show()
+				else:
+					plt.savefig(saveDir+'/'+'Image-'+str(count)+'.jpeg')
+					plt.close()
 				count+=1
 			data_x=[]
 			data_y=[]
@@ -214,12 +279,35 @@ def cloudPointVisualize(inFile,inProximity,pointCount,pltTitle,saveDir):
 			data_inten=[]
 			currTime=line[-1]
 		else:
-			if line[0] <= 2:
+			if line[0] <= 1.5 and line[1] <=1 and line[1] >=-1 and line[2]<=1 and line[2]>=-1:
 				data_x.append(line[0])
 				data_y.append(line[1])
 				data_z.append(line[2])
 				data_inten.append(line[3])
 
-saveDir='/home/gmuadmin/Desktop/Research Experimets/ti-dataacq/riley_rain_fast_cluster_xz'
-#cloudPointVisualize('48cm_exp/Frederick/frederick_push_fast_01_exp_04_06_2019.txt',0.2,0,'Gesture',saveDir)
-cloudPointCluster('48cm_exp/Riley/riley_rain_fast_05_exp_04_06_2019.txt',0.2,0,0.2,'Gesture','2d',saveDir,'xz')
+def processFiles(inDir,saveDir):
+	inFiles=glob.glob(inDir+'/*')
+	planes=['xy','yz','xz']
+	for inFile in inFiles:
+		name=inFile.strip().split('/')[-1]
+		dirName=name.split('_')[1]+name.split('_')[2]
+		os.mkdir(saveDir+'/'+dirName)
+		for plane in planes:
+			try:
+				os.mkdir(saveDir+'/'+dirName+'/'+plane)
+			except:
+				print("Exists:"+dirName)
+			try:
+				os.mkdir(saveDir+'/'+dirName+'/'+plane+'-clust')
+			except:
+				print("Exists:"+dirName)
+			cloudPointVisualize(inFile,0.2,0,dirName,saveDir+'/'+dirName+'/'+plane,'2d',plane)
+			cloudPointCluster(inFile,0.2,0,0.1,dirName,'2d',saveDir+'/'+dirName+'/'+plane+'-clust',axis=plane)
+		
+		
+saveDir='/home/gmuadmin/Desktop/impactProject/20inches_out'
+inDir='/home/gmuadmin/Desktop/impactProject/20inches'
+#cloudPointVisualize('48cm_exp/Frederick/frederick_push_fast_01_exp_04_06_2019.txt',0.2,0,'Gesture',saveDir=None)
+#cloudPointCluster('test_12_06/riley_leanWhat90d_01_12_06_2019.txt',0.2,0,0.1,'Gesture','2d',saveDir='yz',axis='yz')
+#getConvexHull(None)
+processFiles(inDir,saveDir)
