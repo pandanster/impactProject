@@ -19,6 +19,7 @@ import multiprocessing as mp
 from queue import Queue
 from scipy.spatial import Delaunay
 import logging,sys
+from scipy.stats import norm
 logging.basicConfig(stream=sys.stderr,level=logging.INFO)
 logger=logging.getLogger('cloudPoint')
 '''
@@ -504,7 +505,8 @@ def getClusters(x,dist):
 	return clusters,centroids
 
 def saveFigure(x,pltTitle='temp',clustered=False,saveDir=None,pltType='3d',axis=None):
-	plt.clf()
+	if pltType !='3d':
+		plt.clf()
 	fig=plt.figure()
 	fig.suptitle(pltTitle,fontsize=20)
 	colors=['red','green','blue','orange','black','yellow','pink','brown','cyan','purple','grey','violet']
@@ -518,7 +520,6 @@ def saveFigure(x,pltTitle='temp',clustered=False,saveDir=None,pltType='3d',axis=
 		ax.set_zlim(-1,1)
 		if clustered:
 			for u,x_ in enumerate(x):	
-				print(u,x_)
 				ax.scatter(x_[:,0],x_[:,1],x_[:,2],c=colors[u],marker='o')
 		else:
 			ax.scatter(x[:,0],x[:,1],x[:,2],c='r',marker='o')
@@ -618,7 +619,7 @@ def getClusterAreaOverlap(cluster1,cluster2,count):
 	sigma=np.std(cluster1)
 	sigma=.005
 	overlaps=[x for x in cluster2.tolist() if multivariate_normal.pdf(x,mu,sigma) > 0.8]
-	logger.debug("Overlap is:%s",len(overlaps)/cluster2.shape[0])
+#	logger.debug("Overlap is:%s",len(overlaps)/cluster2.shape[0])
 	return len(overlaps)/cluster2.shape[0]
 		
 def handClassifier(clusters,center,radius,delta):
@@ -633,11 +634,12 @@ def getExistingClusters(distClusters,distCentroids,currentCentroids,currClusters
 	existingClusters=[]
 	for key,distCluster in distClusters.items():
 		for i,cluster in enumerate(distCluster):
-			logger.debug("Dist::%s,len of clusters:%s,# Points:%s,Distances:%s,Chosen:%s,ChosenCentroid:%s,distCentroid:%s",key,len(distClusters[key]),cluster.shape[0],[math.sqrt(getDist(distCentroids[key][i],cent)) for cent in chosenCentroids],len(chosenCentroids),chosenCentroids,distCentroids[key][i])
+			logger.debug("Dist::%s,len of clusters:%s,# Points:%s,Distances:%s,Chosen:%s,ChosenCentroid:%s,distCentroid:%s,existing:%s",key,len(distClusters[key]),cluster.shape[0],[math.sqrt(getDist(distCentroids[key][i],cent)) for cent in chosenCentroids],len(chosenCentroids),chosenCentroids,distCentroids[key][i],len(existingClusters))
 			if not any([math.sqrt(getDist(distCentroids[key][i],cent)) < delta for cent in chosenCentroids]):
 				for centroid in currentCentroids:
-					logger.debug("Distance:%s, existing Overlap: %s, chosen Overlap: %s, centroid Dist%s, current cluster overlap%s:",key,getClusterPointOverlap(existingClusters,[cluster]),getClusterPointOverlap(chosenClusters,[cluster]),math.sqrt(getDist(centroid,distCentroids[key][i])),any([getClusterAreaOverlap([cust],[cluster],count) > 0.7 for cust in currClusters]))
-					if (math.sqrt(getDist(centroid,distCentroids[key][i])) < delta or any([getClusterAreaOverlap([cust],[cluster],count) > 0.5 for cust in currClusters])) and getClusterPointOverlap(existingClusters,[cluster]) < 0.7 and getClusterPointOverlap(chosenClusters,[cluster]) < 0.7  and  all([getClusterAreaOverlap([cust],[cluster],count) < 0.7 for cust in chosenClusters]) and all([getClusterAreaOverlap([cust],[cluster],count) < 0.7 for cust in existingClusters]):
+					logger.debug("Distance:%s, existing Overlap: %s, chosen Overlap: %s, centroid Dist%s, current cluster overlap%s:",key,getClusterPointOverlap(existingClusters,[cluster]),getClusterPointOverlap(chosenClusters,[cluster]),math.sqrt(getDist(centroid,distCentroids[key][i])),any([getClusterAreaOverlap([cust],[cluster],count) > 0.6 for cust in currClusters]))
+					if (math.sqrt(getDist(centroid,distCentroids[key][i])) < delta or any([getClusterAreaOverlap([cust],[cluster],count) > 0.5 for cust in currClusters])) and getClusterPointOverlap(existingClusters,[cluster]) < 0.7 and getClusterPointOverlap(chosenClusters,[cluster]) < 0.7  and  all([getClusterAreaOverlap([cust],[cluster],count) < 0.4 for cust in chosenClusters]) and all([getClusterAreaOverlap([cust],[cluster],count) < 0.4 for cust in existingClusters]):
+						logger.debug("Appending for distance:%s with centroids: %s",key,np.mean(cluster,axis=0))
 						existingClusters.append(cluster)
 	logger.debug("Existing Clusters:%s for count %s",len(existingClusters),count)
 	return existingClusters
@@ -674,7 +676,7 @@ def getClusterVoting(distClusters,distCentroids,distances,delta,count):
 					print(i,j,outIndex,len(distCentroids[distances[i]]),len(distClusters[distances[i]]))
 				tempClustersSorted=sorted(tempClusters,key=lambda x:x.shape[0])
 				tempClusterPoints=[cluster.shape[0] for cluster in tempClustersSorted]
-				if len(tempClustersSorted) > 3 and min(tempClusterPoints) >=5 and getClusterPointOverlap(chosenClusters,tempClustersSorted) < 0.7:
+				if len(tempClustersSorted) > 2 and min(tempClusterPoints) >=5 and getClusterPointOverlap(chosenClusters,tempClustersSorted) < 0.7:
 					chosenDists.append(1/sum(tempDistances))
 					chosenClusters.append(tempClustersSorted[int(len(tempClusters)/2)])
 					chosenCentroids.append(np.mean(np.array(tempClustersSorted[int(len(tempClusters)/2)]),axis=0).tolist())
@@ -740,7 +742,7 @@ def chooseClusters(inFile,distances):
 					saveFigure(other,pltTitle='Image-'+str(count),clustered=True,saveDir='temp',pltType='3d',axis='xy')
 				continue
 					
-					if count ==21:
+					if count ==22:
 						logger.setLevel(logging.DEBUG)
 					else:
 						logger.setLevel(logging.INFO)
@@ -752,7 +754,8 @@ def chooseClusters(inFile,distances):
 					currCentroids=[np.mean(np.array(clust),axis=0) for clust in chosenClusters]
 					currClusters=chosenClusters
 					logger.info("Time-stamp:%s, Chosen:%s, existing:%s",count,len(chosenClusters),len(existingClusters))
-					saveFigure(chosenClusters,pltTitle='Image-'+str(count),clustered=True,saveDir='temp',pltType='2d',axis='xy')
+					if count > 60:
+						saveFigure(chosenClusters,pltTitle='Image-'+str(count),clustered=True,saveDir='temp',pltType='3d',axis='xy')
 					chosenClusters=[','.join([str(round(x,4)) for x in np.mean(clust,axis=0).tolist()]) for clust in chosenClusters]
 					f.write(','.join(chosenClusters)+",TimeStep-"+str(count)+",Points:"+','.join([str(x) for x in chosenPoints])+'\n')
 					count+=1
@@ -869,17 +872,32 @@ def plotMultipleDists(distances,target):
 		p.start()
 
 def KinectPlot(inputFile):
+	f=open(inputFile)
 	f=f.readlines()
 	indices=[i for i,j in enumerate(f) if "start" in j or "end" in j]
 	f=f[indices[0]+1:indices[1]]
+	f=[f.strip().split(',') for f in f]
+	f=[np.array(f)[[5,6,9,10]].tolist() for f in f]
+	f=[[x.split(' ')[1:] for x in f] for f in f]
+	f=[[[float(y) for y in x] for x in f] for f in f]
+	f=[[x[:3] for x in f] for f in f]
+	f=[[[x[2],x[0],x[1]] for x in f] for f in f]
+	f=np.array(f)
+#	for i in range(f.shape[0]):
+	print(np.mean(f[:,0,:],axis=0),np.cov(f[:,0,:],rowvar=0),f[:,0,:].shape)
+#	saveFigure(f[:,0,:])
+			
+	
 
 saveDir='/home/gmuadmin/Desktop/impactProject/20inches_out'
 inDir='/home/gmuadmin/Desktop/impactProject/20inches'
 #cloudPointVisualize('exp_19_06/fred_Dshort_headS_01_exp.txt',0.2,0,'Gesture',saveDir=None)
-distances=[0.075,0.1,.125,.15,.175,.2,.25,.3]
+distances=[0.075,0.1,.125,.15,.175,.2]
 #plotMultipleDists(distances,cloudPointCluster)
-chooseClusters('20inches/riley_alarm_02_exp_11_06_2019.txt',distances)
-
+dist=0.175
+#cloudPointCluster('20inches/riley_rain_26_exp_11_06_2019.txt',0.05,0,dist,'Gesture-'+str(dist),'3d','cluster','xy',)
+#chooseClusters('camera_test/riley_camera_02_test_exp.txt',distances)
+KinectPlot('camera_test/kinect/riley_hand_data_bodyData.txt')
 #getConvexHull(None)
 #processFiles(inDir,saveDir)
 #cloudPointParticle('test_12_06/riley_push0d_02_12_06_2019.txt')
