@@ -422,7 +422,8 @@ def cloudPointVisualize(inFile,inProximity,pointCount,pltTitle,saveDir=None,pltT
 						else:
 							x=np.concatenate((x,clust),axis=0)		
 					if pltType=='3d':
-						saveFigure(x,pltTitle='Image-'+str(count),clustered=False,saveDir='temp',pltType='3d',axis='xy')
+						if count > 5:
+							saveFigure(x,pltTitle='Image-'+str(count),clustered=False,saveDir='temp',pltType='3d',axis='xy')
 					else:
 						if axis=='xy':
 							saveFigure(x,pltTitle='Image-'+str(count),clustered=False,saveDir=saveDir,pltType='2d',axis='xy')
@@ -439,7 +440,7 @@ def cloudPointVisualize(inFile,inProximity,pointCount,pltTitle,saveDir=None,pltT
 			data_inten=[]
 			currTime=line[-1]
 		else:
-			if line[0] <= 1.5 and line[0] >= 0.3 and line[1] <= 0.6 and line[1] >=-0.6 and line[2]<=0.6 and line[2]>=-0.6:
+			if line[0] <= 2 and line[0] >= 0.3 and line[1] <= 2 and line[1] >=-2 and line[2]<=2 and line[2]>=-2:
 				data_x.append(line[0])
 				data_y.append(line[1])
 				data_z.append(line[2])
@@ -498,9 +499,9 @@ def saveFigure(x,pltTitle='temp',clustered=False,saveDir=None,pltType='3d',axis=
 		ax.set_xlabel('x')
 		ax.set_ylabel('y')
 		ax.set_zlabel('z')
-		ax.set_xlim(0,1.5)
-		ax.set_ylim(-1,1)
-		ax.set_zlim(-1,1)
+		ax.set_xlim(0,2)
+		ax.set_ylim(-2,2)
+		ax.set_zlim(-2,2)
 		if clustered:
 			for u,x_ in enumerate(x):	
 				ax.scatter(x_[:,0],x_[:,1],x_[:,2],c=colors[u],marker='o')
@@ -770,6 +771,75 @@ def chooseClusters(inFile,distances,kinectFile):
 				data_z.append(line[2])
 	return	
 					
+def trackClusters(inFile,distances,kinectFile):
+	inProximity=0.05
+	inFile=open(inFile,'r')
+	lines=inFile.readlines()
+	lines=[line.strip().split(' ') for line in lines]
+	data_x=[]
+	data_y=[]
+	data_z=[]
+	center=np.array([0,0,0.9])
+	radius=0.6
+	count=0
+	delta=0.1
+	currTime=None
+	procClusters=[]
+	currCentroids=[]
+	currClusters=[]
+	leftMu,leftSigma,rightMu,rightSigma=kinectFitData(kinectFile)	
+	f=open('choosen-clusters','w')
+	filters=[]
+	frames=[]
+	for line in lines:
+		line=[float(x.split('::')[1]) for x in line]
+		if currTime is None:
+			currTime=line[-1]
+		elif getTimeDiff(int(currTime),int(line[-1])) > inProximity:
+			if len(data_x) > 0:
+				data=np.array([[x,y,z] for x,y,z in zip(data_x,data_y,data_z)])
+				if len(procClusters) > 2:
+					x=None
+					for clust in procClusters:				
+						if x is None:
+							x=clust
+						else:
+							x=np.concatenate((x,clust),axis=0)	
+					x=x.reshape(-1,3)
+					distCentroids={}
+					distClusters={}
+					for dist in distances:
+						clusters,centroids=getClusters(x,dist)	
+						listCentroids=[cent.tolist() for cent in centroids]
+						sortedCentroids=sorted([cent.tolist() for cent in centroids],reverse=True)	
+						index=[listCentroids.index(cent) for cent in sortedCentroids]
+						tempClusters=np.array(clusters)[index]
+						distClusters[dist]=[]
+						for i in range(tempClusters.shape[0]):
+							distClusters[dist].append(tempClusters[i])
+						distCentroids[dist]=sortedCentroids
+					chosenClusters,chosenCentroids,chosenDists=getClusterVoting(copy.deepcopy(distClusters),copy.deepcopy(distCentroids),distances,delta,count)
+					existingClusters=getExistingClusters(copy.deepcopy(distClusters),copy.deepcopy(distCentroids),currCentroids,currClusters,chosenCentroids,chosenClusters,delta,count)
+					chosenClusters=chosenClusters+existingClusters
+					currClusters=chosenClusters		
+					frames.append(chosenClusters)	
+					logger.info("Time-stamp:%s, Chosen:%s, existing:%s",count,len(chosenClusters),len(existingClusters))
+					#saveFigure(chosenClusters,pltTitle='Image-'+str(count),clustered=True,saveDir='temp',pltType='3d',axis='xy')
+					chosenClusters=[','.join([str(round(x,4)) for x in np.mean(clust,axis=0).tolist()]) for clust in chosenClusters]
+					f.write(','.join(chosenClusters)+",TimeStep-"+str(count)+",Points:"+','.join([str(x) for x in chosenPoints])+'\n')
+					count+=1
+					procClusters.pop(0)
+				procClusters.append(data)
+				data_x=[]
+				data_y=[]
+				data_z=[]
+				currTime=line[-1]
+		else:
+			if line[0] <= 1.5 and line[0] >= 0.2 and line[1] <= radius and line[1] >=-radius and line[2]<=radius and line[2]>=-radius:
+				data_x.append(line[0])
+				data_y.append(line[1])
+				data_z.append(line[2])
+	return	
 	
 def cloudPointParticle(inFile):
 	radius=0.6
@@ -900,12 +970,12 @@ def kinectFitData(inputFile):
 
 saveDir='/home/gmuadmin/Desktop/impactProject/20inches_out'
 inDir='/home/gmuadmin/Desktop/impactProject/20inches'
-cloudPointVisualize('exp_19_06/fred_DshortHigh_headS_01_exp.txt',0.1,0,'Gesture',saveDir='temp',pltType='2d',axis='yz')
-#distances=[0.075,0.1,.125,.15,.175,.2]
+cloudPointVisualize('20inches/riley_rain_22_exp_11_06_2019.txt',0.05,0,'Gesture',saveDir='temp',pltType='3d',axis='yz')
+distances=[0.075,0.1,.125,.15,.175,.2]
 #plotMultipleDists(distances,cloudPointCluster)
-#kinectFile='camera_test/kinect/riley_hand_data_bodyData.txt'
+kinectFile='camera_test/riley_camera_02_test_exp.txt'
 #kinectFitData(kinectFile)
-#chooseClusters('camera_test/riley_camera_02_test_exp.txt',distances,kinectFile)
+#chooseClusters('6_28/prof_hand_1.txt',distances,kinectFile)
 #getConvexHull(None)
 #processFiles(inDir,saveDir)
 #cloudPointParticle('test_12_06/riley_push0d_02_12_06_2019.txt')
