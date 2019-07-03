@@ -10,6 +10,7 @@ from scipy.spatial import ConvexHull
 from scipy.special import gammainc
 from  sklearn.cluster import AgglomerativeClustering
 from sklearn.cluster import KMeans
+from sklearn.neighbors import NearestNeighbors
 from scipy.stats import multivariate_normal
 from sklearn.metrics import pairwise_distances
 from sklearn.covariance import ledoit_wolf
@@ -23,6 +24,8 @@ import logging,sys
 from scipy.stats import norm
 logging.basicConfig(stream=sys.stderr,level=logging.INFO)
 logger=logging.getLogger('cloudPoint')
+from mpl_toolkits.mplot3d import proj3d
+
 '''
 Computes Moving average Takes two paramters
 @x Sequence to compute moving average on
@@ -58,6 +61,7 @@ class particle:
 
 	def setNoise(self,noise):
 		self.noise=noise
+
 class measure:
 	def __init__(self):
 		self.x=0
@@ -190,6 +194,14 @@ def getConvexHull(points):
 		s=np.append(s,s[0])
 		ax.plot(pts[s,0],pts[s,1],pts[s,2],"r-")
 	plt.show()
+
+def getNearest(points,point,count):
+	nbrs=NearestNeighbors(n_neighbors=count,metric='euclidean')
+	nbrs.fit(points)
+	distances,indices=nbrs.kneighbors(point)
+	return distances,indices
+
+
 '''
 Takes five parameters
 @param inFile - The input File that contains the captured data
@@ -210,6 +222,8 @@ def cloudPointCluster(inFile,inProximity,pointCount,distance,pltTitle,pltType='3
 	data_inten=[]
 	currTime=None
 	count=0
+	kinectFile='7_1/hand_data/riley_hand_1_bodyData.txt'
+	leftHand,rightHand,body=kinectFitData(kinectFile)
 	#db=KMeans(n_clusters=3,random_state=0)
 	db=DBSCAN(eps=distance)
 	colors=['red','green','blue','orange','black','yellow','pink','brown','cyan','purple','grey','violet']
@@ -232,73 +246,46 @@ def cloudPointCluster(inFile,inProximity,pointCount,distance,pltTitle,pltType='3
 					cluster=db.fit(x)
 					pointLabels=cluster.labels_
 					labels=list(set(cluster.labels_))
-					fig=plt.figure()
-					fig.suptitle(pltTitle,fontsize=20)
-					if pltType=='3d':
-						ax=fig.add_subplot(111,projection='3d')
-						ax.set_xlabel('x')
-						ax.set_ylabel('y')
-						ax.set_zlabel('z')
-						ax.set_xlim(0,1.5)
-						ax.set_ylim(-1,1)
-						ax.set_zlim(-1,1)
-	
-						for u,label in enumerate(labels):	
+					plotClusters=[]
+					for u,label in enumerate(labels):	
 							indices=[i for i,j in enumerate(pointLabels) if j == label]
 							x_=x[indices]	
-						#if label !=-1:
-							ax.scatter(x_[:,0],x_[:,1],x_[:,2],c=colors[u],marker='o')
-						plt.show()
-					else:
-						ax=fig.add_subplot(111)
+							plotClusters.append(x_)
 
-						if axis=='xy' or axis == None:
-							ax.set_xlabel('x')
-							ax.set_ylabel('y')
-							ax.set_xlim(0,1.5)
-							ax.set_ylim(-1,1)
-							i=0
-							j=1
-					#	x=np.array([[x,y] for x,y in zip(data_x,data_y)])
-						elif axis == 'yz':
-							ax.set_xlabel('y')
-							ax.set_ylabel('z')
-							ax.set_xlim(-1,1)
-							ax.set_ylim(-1,1)
-					#	x=np.array([[x,y] for x,y in zip(data_y,data_z)])
-							i=1
-							j=2
-						elif axis == 'xz':
-							ax.set_xlabel('x')
-							ax.set_ylabel('z')
-							ax.set_xlim(0,1.5)
-							ax.set_ylim(-1,1)
-							i=0
-							j=2
-					#	x=np.array([[x,y] for x,y in zip(data_x,data_z)])
-					
-					#x=x.reshape(-1,2)
-				#	cluster=db.fit(x)
-				#	pointLabels=cluster.labels_
-				#	labels=list(set(cluster.labels_))
-						for u,label in enumerate(labels):	
-							indices=[i for i,j in enumerate(pointLabels) if j == label]
-							x_=x[indices]	
-							if label !=-1:
-								try:
-									ax.scatter(x_[:,i],x_[:,j],c=colors[u],marker='o')
-								except Exception as e:
-									print(e)
-									print(u,currTime)
+					if pltType=='3d':
+						if count > 28:
+							saveFigure(plotClusters,pltTitle='Image-'+str(count),clustered=True,saveDir='temp',pltType='3d',axis='xy')
+						getClusters=input("Enter the list of clusters by their colors:")
+						try:
+							getClusters=eval(getClusters)
+							for color in getClusters:
+								clusterIndex=colors.index(color)
+								tempCluster=plotClusters[clusterIndex]
+								centroid=np.mean(tempCluster,axis=0)
+								print("For color:",color,"Centroid::",centroid)
+								print("Left::",getHandClusterProb(leftHand,tempCluster))
+								print("Right::",getHandClusterProb(rightHand,tempCluster))
+								print("Body::",getHandClusterProb(body,tempCluster))
+								tempCluster=tempCluster.tolist()
+								tempDistances=[math.sqrt(getDist([0,0,0],point)) for point in tempCluster]
+								minDistPoint=tempCluster[tempDistances.index(min(tempDistances))]
+						except Exception as e:
+							print(e)
+					else:
 						if count==0:
 							try:
 								os.mkdir(saveDir+'/'+str(distance)+axis)
 							except:
 								pass
-						plt.savefig(saveDir+'/'+str(distance)+axis+'/Image-'+str(count)+'.jpeg')
-						count+=1
-						plt.close()
+						saveDir=saveDir+'/'+str(distance)+axis
+						if axis=='xy':
+							saveFigure(x,pltTitle='Image-'+str(count),clustered=False,saveDir=saveDir,pltType='2d',axis='xy')
+						elif axis=='yz':
+							saveFigure(x,pltTitle='Image-'+str(count),clustered=False,saveDir=saveDir,pltType='2d',axis='yz')
+						else:
+							saveFigure(x,pltTitle='Image-'+str(count),clustered=False,saveDir=saveDir,pltType='2d',axis='xz')
 					clusters.pop(0)
+					count+=1
 					clusters.append(data)
 				else:
 					clusters.append(data)
@@ -308,7 +295,7 @@ def cloudPointCluster(inFile,inProximity,pointCount,distance,pltTitle,pltType='3
 				data_inten=[]
 				currTime=line[-1]
 		else:
-			if line[0] <= 1.5 and line[0] >= 0.3 and line[1] <= 0.6 and line[1] >=-0.6 and line[2]<=0.6 and line[2]>=-0.6:
+			if line[0] <= 1.5 and line[0] >= 0.3 and line[1] <= 1 and line[1] >=-1 and line[2]<=1 and line[2]>=-1:
 				data_x.append(line[0])
 				data_y.append(line[1])
 				data_z.append(line[2])
@@ -422,7 +409,7 @@ def cloudPointVisualize(inFile,inProximity,pointCount,pltTitle,saveDir=None,pltT
 						else:
 							x=np.concatenate((x,clust),axis=0)		
 					if pltType=='3d':
-						if count > 5:
+						if count > 15:
 							saveFigure(x,pltTitle='Image-'+str(count),clustered=False,saveDir='temp',pltType='3d',axis='xy')
 					else:
 						if axis=='xy':
@@ -440,7 +427,7 @@ def cloudPointVisualize(inFile,inProximity,pointCount,pltTitle,saveDir=None,pltT
 			data_inten=[]
 			currTime=line[-1]
 		else:
-			if line[0] <= 2 and line[0] >= 0.3 and line[1] <= 2 and line[1] >=-2 and line[2]<=2 and line[2]>=-2:
+			if line[0] <= 1.5 and line[0] >= 0.3 and line[1] <= 1 and line[1] >=-1 and line[2]<=1 and line[2]>=-1:
 				data_x.append(line[0])
 				data_y.append(line[1])
 				data_z.append(line[2])
@@ -542,9 +529,17 @@ def saveFigure(x,pltTitle='temp',clustered=False,saveDir=None,pltType='3d',axis=
 			plt.savefig(saveDir+'/'+pltTitle+'.jpeg')
 			plt.close()
 					
-def getHandClusterProb(mu,sigma,clusters):
-	overlaps=[x for x in clusters.tolist() if multivariate_normal.pdf(x,mu,sigma) > 0.7]
+def getHandClusterProb(hand,point):
+	'''
+	normal=multivariate_normal(mu,sigma)
+	overlaps=[x for x in clusters.tolist() if normal.pdf(x) > 0.7]
+	print("Multivariate Gaussian")
+	print(sum([normal.cdf(x) for x in clusters.tolist()]))
 	return (len(overlaps)/clusters.shape[0])
+	'''
+	distances,indices=getNearest(hand,point,30)
+	#print(hand[indices])
+	return math.sqrt(np.sum(distances))
 
 def getClusterPointOverlap(cluster1,cluster2):
 	temp2=None
@@ -643,10 +638,11 @@ def getClusterVoting(distClusters,distCentroids,distances,delta,count):
 					chosenCentroids.append(np.mean(np.array(tempClustersSorted[int(len(tempClusters)/2)]),axis=0).tolist())
 	return chosenClusters,chosenCentroids,chosenDists			
 	
-def getClusterVoting2(distClusters,distCentroids,distances,delta,count,leftMu,leftSigma,rightMu,rightSigma):
+def getClusterVoting2(distClusters,distCentroids,distances,delta,count,kinectFile):
 	chosenClusters=[]
 	chosenDists=[]
 	chosenCentroids=[]
+	leftHand,rightHand,body=kinectFitData(kinectFile)
 	for i in range(0,len(distances)):
 		if len(distClusters[distances[i]]) > 0:
 			for v in distCentroids[distances[i]]:
@@ -739,6 +735,7 @@ def chooseClusters(inFile,distances,kinectFile):
 					chosenClusters,chosenCentroids,chosenDists=getClusterVoting(copy.deepcopy(distClusters),copy.deepcopy(distCentroids),distances,delta,count)
 					existingClusters=getExistingClusters(copy.deepcopy(distClusters),copy.deepcopy(distCentroids),currCentroids,currClusters,chosenCentroids,chosenClusters,delta,count)
 					chosenClusters=chosenClusters+existingClusters
+					'''
 					handClusters=[]
 					for chosen in chosenClusters:
 						if getHandClusterProb(leftMu,leftSigma,chosen) > 0.7 or getHandClusterProb(rightMu,rightSigma,chosen) > 0.7:
@@ -754,9 +751,11 @@ def chooseClusters(inFile,distances,kinectFile):
 					if len(handClusters)>0:
 #						getClusterVoting2(copy.deepcopy(distClusters),copy.deepcopy(distCentroids),distances,delta,count,leftMu,leftSigma,rightMu,rightSigma)
 			#			saveFigure(handClusters,pltTitle='Image-'+str(count),clustered=True,saveDir='temp',pltType='3d',axis='xy')
+					'''
+					if count >10:
 						saveFigure(chosenClusters,pltTitle='Image-'+str(count),clustered=True,saveDir='temp',pltType='3d',axis='xy')
 					chosenClusters=[','.join([str(round(x,4)) for x in np.mean(clust,axis=0).tolist()]) for clust in chosenClusters]
-					f.write(','.join(chosenClusters)+",TimeStep-"+str(count)+",Points:"+','.join([str(x) for x in chosenPoints])+'\n')
+					#f.write(','.join(chosenClusters)+",TimeStep-"+str(count)+",Points:"+','.join([str(x) for x in chosenPoints])+'\n')
 					count+=1
 					procClusters.pop(0)
 				procClusters.append(data)
@@ -770,7 +769,49 @@ def chooseClusters(inFile,distances,kinectFile):
 				data_y.append(line[1])
 				data_z.append(line[2])
 	return	
-					
+
+def checkSphere(point,center,radius):
+	return ((center[0]-point[0])**2+(center[1]-point[1])**2+(center[2]-point[2])**2) < (radius)**2
+
+def getMidPoint(p1,p2):
+	if type(p1) is list:
+		p1=np.array(p1)
+	if type(p2) is list:
+		p2=np.array(p2)
+	return (p1+p2)/2
+
+def get3DSphere(center,radius):
+	return None
+
+def rikersBounding(points):
+	if type(points) is not list:
+		points=points.tolist()
+	x=points[random.randint(0,len(points))]
+	distx=[math.sqrt(getDist(x,point)) for point in points]
+	y=points[distx.index(max(distx))]
+	disty=[math.sqrt(getDist(y,point)) for point in points]
+	z=points[disty.index(max(disty))]
+	center=getMidPoint(y,z)
+	radius=math.sqrt(getDist(y,z))/2
+	inSphere=[checkSphere(point,center,radius) for point in points]
+	count=0
+	while not all(inSphere):
+		print(inSphere)
+		pointIndex=inSphere.index(False)
+		print(radius)
+		radius=float(math.sqrt(getDist(center,points[pointIndex])))
+		radius+=.01
+		print(radius)
+		inSphere=[checkSphere(point,center,radius) for point in points]
+		print(inSphere)
+		if count>2:
+			break
+		count+=1
+	return y,z
+
+def createParticles(cluster):
+	return None
+
 def trackClusters(inFile,distances,kinectFile):
 	inProximity=0.05
 	inFile=open(inFile,'r')
@@ -787,7 +828,7 @@ def trackClusters(inFile,distances,kinectFile):
 	procClusters=[]
 	currCentroids=[]
 	currClusters=[]
-	leftMu,leftSigma,rightMu,rightSigma=kinectFitData(kinectFile)	
+	leftHand,rightHand,body=kinectFitData(kinectFile)	
 	f=open('choosen-clusters','w')
 	filters=[]
 	frames=[]
@@ -821,7 +862,12 @@ def trackClusters(inFile,distances,kinectFile):
 					chosenClusters,chosenCentroids,chosenDists=getClusterVoting(copy.deepcopy(distClusters),copy.deepcopy(distCentroids),distances,delta,count)
 					existingClusters=getExistingClusters(copy.deepcopy(distClusters),copy.deepcopy(distCentroids),currCentroids,currClusters,chosenCentroids,chosenClusters,delta,count)
 					chosenClusters=chosenClusters+existingClusters
-					currClusters=chosenClusters		
+					currClusters=chosenClusters	
+					if len(frames) > 2:
+						for cluster in chosenClusters:
+							if all([any([getClusterAreaOverlap(cust,cluster,count)> 0.8 for cust in frame]) for frame in frames]):
+								createParticles(cluster)
+
 					frames.append(chosenClusters)	
 					logger.info("Time-stamp:%s, Chosen:%s, existing:%s",count,len(chosenClusters),len(existingClusters))
 					#saveFigure(chosenClusters,pltTitle='Image-'+str(count),clustered=True,saveDir='temp',pltType='3d',axis='xy')
@@ -939,43 +985,67 @@ def plotMultipleDists(distances,target):
 		count+=1
 		p.start()
 
+'''
+Kinect Joints
+3- Head joint
+2- Neck joint
+20- Spine shoulder joint
+1- Spine Mid joint
+0- Spine base joint
+4- Shoulder left
+5- Elbow left
+6- Wrist Left
+8 - Shoulder right
+9- Elbow right
+10 - Wrist right
+'''
 def kinectFitData(inputFile):
 	f=open(inputFile)
 	f=f.readlines()
 	indices=[i for i,j in enumerate(f) if "start" in j or "end" in j]
 	f=f[indices[0]+1:indices[1]]
 	f=[f.strip().split(',') for f in f]
-	lf=[f[6] for f in f]
-	rf=[f[10] for f in f]
-	print(lf[0])
-	lf=[x.split(' ')[1:]  for x in lf]
-	rf=[x.split(' ')[1:] for x in rf]
-	print(lf[0])
-	lf=[[float(x) for x in f] for f in lf]
-	rf=[[float(x) for x in f] for f in rf]
-	lf=[f[:3] for f in lf]
-	rf=[f[:3] for f in rf]
-	lf=[[x[2]+.05,x[0],x[1]] for x in lf]
-	rf=[[x[2],x[0],x[1]] for x in rf]
+	lf=[(np.array(f)[[6,7,21]]).tolist() for f in f]
+	rf=[(np.array(f)[[10,11,23]]).tolist() for f in f]
+	body=[(np.array(f)[[3,2,20,1,0]]).tolist() for f in f]
+	lf=[[y.split(' ')[1:] for y in x] for x in lf]
+	rf=[[y.split(' ')[1:] for y in x] for x in rf]
+	body=[[y.split(' ')[1:] for y in x] for x in body]
+	lf=[[[float(y) for y in x] for x in f] for f in lf]
+	rf=[[[float(y) for y in x] for x in f] for f in rf]
+	body=[[[float(y) for y in x] for x in f] for f in body]
+	lf=[[x[:3] for x in  f] for f in lf]
+	rf=[[x[:3] for x in f] for f in rf]
+	body=[[x[:3] for x in f] for f in body]
+	lf=[[[x[2],x[0],x[1]] for x in y] for y in lf]
+	rf=[[[x[2],x[0],x[1]] for x in y] for y in rf]
+	body=[[[x[2],x[0],x[1]] for x in y] for y in body]
 	lf=np.array(lf)
 	rf=np.array(rf)
+	body=np.array(body)
+	#print(body.shape)
+	lf=lf.reshape(lf.shape[0]*lf.shape[1],-1)
+	rf=rf.reshape(rf.shape[0]*rf.shape[1],-1)
+	body=body.reshape(body.shape[0]*body.shape[1],-1)
+	#print(lf.shape,rf.shape,body.shape)
 	leftMu=np.mean(lf,axis=0)
 	leftSigma=np.cov(lf,rowvar=False)
-	saveFigure([lf,rf],clustered=True)
+	#saveFigure([lf,rf,body],clustered=True)
 	rightMu=np.mean(rf,axis=0)
 	rightSigma=np.cov(rf,rowvar=False)
-	return leftMu,leftSigma,rightMu,rightSigma
-			
+	return lf,rf,body		
 	
-
 saveDir='/home/gmuadmin/Desktop/impactProject/20inches_out'
 inDir='/home/gmuadmin/Desktop/impactProject/20inches'
-cloudPointVisualize('20inches/riley_rain_22_exp_11_06_2019.txt',0.05,0,'Gesture',saveDir='temp',pltType='3d',axis='yz')
+#cloudPointVisualize('7_1/riley_hand_1.txt',0.05,0,'Gesture',saveDir='temp',pltType='3d',axis='yz')
 distances=[0.075,0.1,.125,.15,.175,.2]
 #plotMultipleDists(distances,cloudPointCluster)
-kinectFile='camera_test/riley_camera_02_test_exp.txt'
+dist=0.1
+cloudPointCluster('7_1/riley_hand_1.txt',0.05,0,dist,'Gesture-'+str(dist),'3d','cluster','xy',)
+#kinectFile='7_1/hand_data/riley_hand_1_bodyData.txt'
 #kinectFitData(kinectFile)
-#chooseClusters('6_28/prof_hand_1.txt',distances,kinectFile)
+#chooseClusters('7_1/riley_hand_1.txt',distances,kinectFile)
 #getConvexHull(None)
 #processFiles(inDir,saveDir)
 #cloudPointParticle('test_12_06/riley_push0d_02_12_06_2019.txt')
+#rikersBounding(np.random.randn(10,3))
