@@ -213,9 +213,9 @@ def getNonOverlapingPoints(cluster1,cluster2,part=None,clusterParts=None,bodyPar
 	nonOverlapping=[]
 	for i in range(cluster2.shape[0]):
 		if not checkOnly:
-			if not checkSphere(cluster2[i],center,radius) and all([np.sum(getNearest(clusterParts[part],cluster2[i].reshape(1,-1),5)[0]) < np.sum(getNearest(clusterParts[tempPart],cluster2[i].reshape(1,-1),5)[0]) for tempPart in bodyParts if part!=tempPart and clusterParts[tempPart] is not None]):
+			if not checkSphere(cluster2[i],center,radius) and all([np.sum(getNearest(clusterParts[part],cluster2[i].reshape(1,-1),5)[0]) < np.sum(getNearest(clusterParts[tempPart],cluster2[i].reshape(1,-1),5)[0]) for tempPart in bodyParts if part!=tempPart and clusterParts[tempPart] is not None and clusterParts[tempPart].shape[0] > 5]):
 				nonOverlapping.append(cluster2[i])
-			elif not checkSphere(cluster2[i],center,radius) and all([np.sum(getNearest(clusterParts[tempPart],cluster2[i].reshape(1,-1),5)[0]) > 1 for tempPart in bodyParts if part!=tempPart and clusterParts[tempPart] is not None]):
+			elif not checkSphere(cluster2[i],center,radius) and all([np.sum(getNearest(clusterParts[tempPart],cluster2[i].reshape(1,-1),5)[0]) > 1 for tempPart in bodyParts if part!=tempPart and clusterParts[tempPart] is not None and clusterParts[tempPart].shape[0] > 5]):
 				nonOverlapping.append(cluster2[i])
 		else:
 			if not checkSphere(cluster2[i],center,radius):
@@ -810,6 +810,7 @@ def getClusterVoting2(distClusters,distCentroids,distances,delta,count,kinectFil
 				if count > 10:
 					logger.debug("Support:%s,left Prob:%s,right Prob:%s,Body Prob%s,Distance:%s,Point Count:%s,Count::%s,Pred::%s,Actual::%s",support,round(leftHandProb,4),round(rightHandProb,4),round(bodyProb,4),distances[i],distClusters[distances[i]][outIndex].shape[0],count,getClusterCount(distCentroids[distances[i]],delta),len(distClusters[distances[i]]))
 	clusters={'left':None,'right':None,'body':None}
+	tempClusters={'left':None,'right':None,'body':None}
 	currDist={'left':None,'right':None,'body':None}
 	for i in range(len(supports)):
 		if supports[i] > 0.1:
@@ -850,16 +851,66 @@ def getClusterVoting2(distClusters,distCentroids,distances,delta,count,kinectFil
 						logger.debug("Right Cluster:%s,Distance:%s",clusters['right'].shape[0],currDist['right'])
 					except:
 						logger.debug("Right Cluster:%s,Distance:%s",clusters['right'],currDist['right'])
+		else:
+			for part in bodyParts:
+				logger.debug("For Part:%s,support is:%s,Distance%s,Cluster size:%s",part,partSupports[i][part],distIndex[i][0],distClusters[distIndex[i][0]][distIndex[i][1]].shape[0])					
+				if partSupports[i][part] > 0:
+					index=distIndex[i]
+					if tempClusters[part] is None:
+						if all([(getClusterPointOverlap([tempClusters[tempPart]],[distClusters[index[0]][index[1]]]) == 0) for tempPart in bodyParts if tempClusters[tempPart] is not None and tempPart != part]):
+							tempClusters[part]=distClusters[index[0]][index[1]]
+							currDist[part]=index[0]
+					elif currDist[part]==index[0] and all([(getClusterPointOverlap([tempClusters[tempPart]],[distClusters[index[0]][index[1]]]) == 0) for tempPart in bodyParts if tempClusters[tempPart] is not None and tempPart != part]):
+						logger.debug("For distance:%s,the cluster shape is:%s",index[0],distClusters[index[0]][index[1]].shape[0])
+						tempClusters[part]=np.concatenate((tempClusters[part],distClusters[index[0]][index[1]]),axis=0)
+					elif distClusters[index[0]][index[1]].shape[0] > tempClusters[part].shape[0]:
+						if all([(getClusterPointOverlap([tempClusters[tempPart]],[distClusters[index[0]][index[1]]]) == 0) and  (math.sqrt(getDist(np.mean(tempClusters[tempPart],axis=0),np.mean(distClusters[index[0]][index[1]],axis=0))) < delta) for tempPart in bodyParts if tempClusters[tempPart] is not None and tempPart != part]): 
+							tempClusters[part]=distClusters[index[0]][index[1]]
+							currDist[part]=index[0]							
+						else:
+							#for part in bodyParts:
+							if tempClusters[part] is not None:
+								logger.debug("For distance:%s,for Part:%s,clusterShape:%s,non-verlapping:%s",index[0],part,distClusters[index[0]][index[1]].shape[0],getNonOverlapingPoints(tempClusters[part],distClusters[index[0]][index[1]],part,tempClusters,bodyParts).shape[0])
+								if getNonOverlapingPoints(tempClusters[part],distClusters[index[0]][index[1]],part,tempClusters,bodyParts).shape[0] >0:
+									try:										
+										tempClusters[part]=np.concatenate((tempClusters[part],getNonOverlapingPoints(tempClusters[part],distClusters[index[0]][index[1]],part,tempClusters,bodyParts)),axis=0)
+									except:
+										logger.debug("Received points:%s",getNonOverlapingPoints(tempClusters[part],distClusters[index[0]][index[1]],part,tempClusters,bodyParts).shape)
+					
+					try:	
+						logger.debug("Body Cluster:%s,Distance:%s",tempClusters['body'].shape[0],currDist['body'])
+					except:
+						logger.debug("Body Cluster:%s,Distance:%s",tempClusters['body'],currDist['body'])
+					try:
+						logger.debug("Left Cluster:%s,Distance:%s",tempClusters['left'].shape[0],currDist['left'])
+					except:
+						logger.debug("Left Cluster:%s,Distance:%s",tempClusters['left'],currDist['left'])
+					try:
+						logger.debug("Right Cluster:%s,Distance:%s",tempClusters['right'].shape[0],currDist['right'])
+					except:
+						logger.debug("Right Cluster:%s,Distance:%s",tempClusters['right'],currDist['right'])
 	for part in bodyParts:
-		if clusters[part] is None:
+		if clusters[part] is None and tempClusters[part] is not None:
+			clusters[part]=tempClusters[part]
+		elif clusters[part] is None:
 			logger.debug("Part %s is None",part)
 			clusters[part]=[]	
 	if getClusterPointOverlap([clusters['right']],[clusters['body']]) > 0.5:
-		logger.debug("Emptying Right Cluster")
-		clusters['right']=[]
+		center1,radius1=rikersBounding(clusters['right'])
+		center2,radius2=rikersBounding(clusters['body'])
+		if math.sqrt(getDist(center1,center2)) > 0.1:
+			clusters['body']=getNonOverlapingPoints(clusters['right'],clusters['body'],checkOnly=True)
+		else:	
+			logger.debug("Emptying Right Cluster")
+			clusters['right']=[]
 	if getClusterPointOverlap([clusters['left']],[clusters['body']]) > 0.5:
-		logger.debug("Emptying Left Cluster")
-		clusters['left']=[]
+		center1,radius1=rikersBounding(clusters['left'])
+		center2,radius2=rikersBounding(clusters['body'])
+		if math.sqrt(getDist(center1,center2)) > 0.1:
+			clusters['body']=getNonOverlapingPoints(clusters['left'],clusters['body'],checkOnly=True)
+		else:
+			logger.debug("Emptying Left Cluster")
+			clusters['left']=[]
 	'''	
 	currBodyDist=None
 	currRightHandDist=None
@@ -1004,7 +1055,8 @@ def chooseClusters(inFile,distances,kinectFile,saveDir=None):
 						for axis in axes:
 							saveFigure(toPlot,pltTitle='Image-'+str(count),clustered=True,saveDir=saveDir+'/'+axis,pltType='2d',axis=axis)
 					else:
-						saveFigure(toPlot.values(),pltTitle='Image-'+str(count),clustered=True,saveDir=saveDir+'_'+axis,pltType='3d',axis=axis)
+						toPlot=[x for x in toPlot.values() if x is not None]
+						saveFigure(toPlot,pltTitle='Image-'+str(count),clustered=True,saveDir=None,pltType='3d',axis=None)
 					'''
 					body=getNonOverlapingPoints(left,body,checkOnly=True)
 					body=getNonOverlapingPoints(right,body,checkOnly=True)		
@@ -1365,16 +1417,16 @@ def kinectFitData(inputFile):
 	
 inDir='/mnt/d/impactProject/ali_23words'
 saveDir='/mnt/d/impactProject/ali_23words_out'
-#cloudPointVisualize('ali_23words/ali_visiting_02.txt',0.05,0,'Gesture',saveDir='temp',pltType='3d',axis='yz')
+#cloudPointVisualize('ali_23words/ali_huddle_02.txt',0.05,0,'Gesture',saveDir='temp',pltType='3d',axis='yz')
 distances=[0.05,0.075,0.1,.125,.15,.175,.2]
 dist=.075
 #plotMultipleDists(distances,cloudPointCluster)
 #cloudPointCluster('ali_23words/ali_students_02.txt',0.05,0,dist,'Gesture-'+str(dist),'3d','cluster','xy',)
 kinectFile='primitive_motions'
 #kinectFitData(kinectFile)
-#chooseClusters('newWordLs/riley_visiting_02.txt',distances,kinectFile)
+chooseClusters('ali_23words/ali_huddle_02.txt',distances,kinectFile)
 #trackClusters('7_1/riley_hand_1.txt',distances,kinectFile)
 #getConvexHull(None)
-processFiles(inDir,saveDir,distances,kinectFile)
+#processFiles(inDir,saveDir,distances,kinectFile)
 #cloudPointParticle('test_12_06/riley_push0d_02_12_06_2019.txt')
 #rikersBounding(np.random.randn(10,3))
