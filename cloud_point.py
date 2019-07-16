@@ -22,7 +22,7 @@ from queue import Queue
 from scipy.spatial import Delaunay
 import logging,sys
 from scipy.stats import norm
-logging.basicConfig(stream=sys.stderr,level=logging.DEBUG)
+logging.basicConfig(stream=sys.stderr,level=logging.INFO)
 logger=logging.getLogger('cloudPoint')
 from mpl_toolkits.mplot3d import proj3d
 from matplotlib.ticker import NullLocator
@@ -213,9 +213,9 @@ def getNonOverlapingPoints(cluster1,cluster2,part=None,clusterParts=None,bodyPar
 	nonOverlapping=[]
 	for i in range(cluster2.shape[0]):
 		if not checkOnly:
-			if not checkSphere(cluster2[i],center,radius) and all([np.sum(getNearest(clusterParts[part],cluster2[i].reshape(1,-1),5)[0]) < np.sum(getNearest(clusterParts[tempPart],cluster2[i].reshape(1,-1),5)[0]) for tempPart in bodyParts if part!=tempPart and clusterParts[tempPart] is not None and clusterParts[tempPart].shape[0] > 5]):
+			if not checkSphere(cluster2[i],center,radius) and all([np.sum(getNearest(clusterParts[part],cluster2[i].reshape(1,-1),5)[0]) < np.sum(getNearest(clusterParts[tempPart],cluster2[i].reshape(1,-1),5)[0]) for tempPart in bodyParts if part!=tempPart and clusterParts[tempPart] is not None and clusterParts[tempPart].shape[0] > 5 and clusterParts[part].shape[0] >5]):
 				nonOverlapping.append(cluster2[i])
-			elif not checkSphere(cluster2[i],center,radius) and all([np.sum(getNearest(clusterParts[tempPart],cluster2[i].reshape(1,-1),5)[0]) > 1 for tempPart in bodyParts if part!=tempPart and clusterParts[tempPart] is not None and clusterParts[tempPart].shape[0] > 5]):
+			elif not checkSphere(cluster2[i],center,radius) and all([np.sum(getNearest(clusterParts[tempPart],cluster2[i].reshape(1,-1),5)[0]) > 1 for tempPart in bodyParts if part!=tempPart and clusterParts[tempPart] is not None and clusterParts[tempPart].shape[0] > 5 and clusterParts[part].shape[0] >5]):
 				nonOverlapping.append(cluster2[i])
 		else:
 			if not checkSphere(cluster2[i],center,radius):
@@ -1424,7 +1424,7 @@ dist=.075
 #cloudPointCluster('ali_23words/ali_students_02.txt',0.05,0,dist,'Gesture-'+str(dist),'3d','cluster','xy',)
 kinectFile='primitive_motions'
 #kinectFitData(kinectFile)
-chooseClusters('ali_23words/ali_huddle_02.txt',distances,kinectFile)
+chooseClusters('ali_23words/ali_worried_02.txt',distances,kinectFile)
 #trackClusters('7_1/riley_hand_1.txt',distances,kinectFile)
 #getConvexHull(None)
 #processFiles(inDir,saveDir,distances,kinectFile)
