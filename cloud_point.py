@@ -522,9 +522,9 @@ def getClusters(x,dist):
 def saveFigure(x,pltTitle='temp',clustered=False,saveDir=None,pltType='3d',axis=None,Multiview=False,elevations=None,azimuths=None):
 	if pltType !='3d':
 		plt.clf()
-	fig=plt.figure()
 	colors=['red','green','blue']
 	if pltType=='3d':
+		fig=plt.figure()
 		fig.suptitle(pltTitle,fontsize=20)
 		ax=fig.add_subplot(111,projection='3d')
 		ax.set_xlabel('x')
@@ -534,19 +534,41 @@ def saveFigure(x,pltTitle='temp',clustered=False,saveDir=None,pltType='3d',axis=
 		ax.set_ylim(-1,1)
 		ax.set_zlim(-1,1)
 		if clustered:
-			for u,x_ in enumerate(x):	
-				ax.scatter(x_[:,0],x_[:,1],x_[:,2],c=colors[u],marker='o')
+			if type(x) is list:
+				for u,x_ in enumerate(x):	
+					ax.scatter(x_[:,0],x_[:,1],x_[:,2],c=colors[u],marker='o')
+			else:
+				if x['body'] is not None:
+					try:
+						ax.scatter(x['body'][:,0],x['body'][:,1],x['body'][:,2],c='red',marker='o')
+					except:
+						logger.debug("Shape for body:%s",x['body'].shape)
+						exit(0)
+				if x['left'] is not None:
+					try:
+						ax.scatter(x['left'][:,0],x['left'][:,1],x['left'][:,2],c='green',marker='o')
+					except:
+						logger.debug("Shape for left:%s",x['left'].shape)
+						exit(0)
+				if x['right'] is not None:
+					try:
+						ax.scatter(x['right'][:,0],x['right'][:,1],x['right'][:,2],c='blue',marker='o')
+					except:
+						logger.debug("Shape for right:%s",x['right'].shape)
+						exit(0)
 		else:
 			ax.scatter(x[:,0],x[:,1],x[:,2],c='r',marker='o')
 		plt.show()
 	elif Multiview is True:
+		fig=plt.figure(num=None,figsize=(1.5,1.5),dpi=80)
 		ax=fig.add_subplot(111,projection='3d')
-		ax.set_xlim(0,2)
-		ax.set_ylim(-1,1)
-		ax.set_zlim(-1,1)
+		ax.set_xlim3d(0,1.5)
+		ax.set_ylim3d(-0.6,0.6)
+		ax.set_zlim3d(-0.6,0.6)
 		ax.grid(False)
 		ax.set_axis_off()
 		plt.margins(0,0,0)
+		ax.dist=5
 		ax.xaxis.set_major_locator(NullLocator())
 		ax.yaxis.set_major_locator(NullLocator())
 		plt.ioff()
@@ -574,10 +596,12 @@ def saveFigure(x,pltTitle='temp',clustered=False,saveDir=None,pltType='3d',axis=
 					except:
 						logger.debug("Shape for right:%s",x['right'].shape)
 						exit(0)
+		ax.dist=25
 		for azimuth in azimuths:
 			for elevation in elevations:
 				ax.view_init(elev=elevation,azim=azimuth)
 				plt.savefig(saveDir+'/'+str(azimuth)+'-'+str(elevation)+'/'+pltTitle+'.jpeg')
+		plt.close()
 		logger.debug("Multiview is set")
 	else:
 		ax=fig.add_subplot(111)
@@ -850,13 +874,13 @@ def getClusterVoting2(distClusters,distCentroids,distances,delta,count,kinectFil
 					primtive_probs[primitive]['body'].append(bodyProb)
 					if min([leftHandProb,rightHandProb,bodyProb]) < 3.5:
 						partSupport[bodyParts[([leftHandProb,rightHandProb,bodyProb]).index(min([leftHandProb,rightHandProb,bodyProb]))]]+=1
-					if count > 10:
+					if count > 0:
 						logger.debug("Primtive:%s,Distance:%s,left:%s,right:%s,body:%s,setting support:%s",primitive,distances[i],round(leftHandProb,4),round(rightHandProb,4),round(bodyProb,4),bodyParts[([leftHandProb,rightHandProb,bodyProb]).index(min([leftHandProb,rightHandProb,bodyProb]))])
 				partSupports.append(partSupport)
 				#logger.debug("Left Support:%s,Right Support:%s, Body Support:%s",partSupport['left'],partSupport['right'],partSupport['body'])
 				supports.append(support)
 				distIndex.append((distances[i],outIndex))
-				if count > 10:
+				if count > 0:
 					logger.debug("Support:%s,left Prob:%s,right Prob:%s,Body Prob%s,Distance:%s,Point Count:%s,Count::%s,Pred::%s,Actual::%s",support,round(leftHandProb,4),round(rightHandProb,4),round(bodyProb,4),distances[i],distClusters[distances[i]][outIndex].shape[0],count,getClusterCount(distCentroids[distances[i]],delta),len(distClusters[distances[i]]))
 	clusters={'left':None,'right':None,'body':None}
 	tempClusters={'left':None,'right':None,'body':None}
@@ -865,7 +889,7 @@ def getClusterVoting2(distClusters,distCentroids,distances,delta,count,kinectFil
 		if supports[i] > 0.1:
 			for part in bodyParts:
 				logger.debug("For Part:%s,support is:%s,Distance%s,Cluster size:%s",part,partSupports[i][part],distIndex[i][0],distClusters[distIndex[i][0]][distIndex[i][1]].shape[0])					
-				if partSupports[i][part] > 0:
+				if (partSupports[i][part] > 0 and part=='right' and partSupports[i][part] > partSupports[i]['left']) or (partSupports[i][part] > 0 and part=='left' and partSupports[i][part] > partSupports[i]['right']) or (partSupports[i][part] > 0 and part=='body'):
 					index=distIndex[i]
 					if clusters[part] is None:
 						if all([(getClusterPointOverlap([clusters[tempPart]],[distClusters[index[0]][index[1]]]) == 0) for tempPart in bodyParts if clusters[tempPart] is not None and tempPart != part]):
@@ -903,7 +927,7 @@ def getClusterVoting2(distClusters,distCentroids,distances,delta,count,kinectFil
 		else:
 			for part in bodyParts:
 				logger.debug("For Part:%s,support is:%s,Distance%s,Cluster size:%s",part,partSupports[i][part],distIndex[i][0],distClusters[distIndex[i][0]][distIndex[i][1]].shape[0])					
-				if partSupports[i][part] > 0:
+				if (partSupports[i][part] > 0 and part=='right' and partSupports[i][part] > partSupports[i]['left']) or (partSupports[i][part] > 0 and part=='left' and partSupports[i][part] > partSupports[i]['right']) or (partSupports[i][part] > 0 and part=='body'):
 					index=distIndex[i]
 					if tempClusters[part] is None:
 						if all([(getClusterPointOverlap([tempClusters[tempPart]],[distClusters[index[0]][index[1]]]) == 0) for tempPart in bodyParts if tempClusters[tempPart] is not None and tempPart != part]):
@@ -947,7 +971,7 @@ def getClusterVoting2(distClusters,distCentroids,distances,delta,count,kinectFil
 	if getClusterPointOverlap([clusters['right']],[clusters['body']]) > 0.5:
 		center1,radius1=rikersBounding(clusters['right'])
 		center2,radius2=rikersBounding(clusters['body'])
-		if math.sqrt(getDist(center1,center2)) > 0.1:
+		if math.sqrt(getDist(center1,center2)) > 0.2:
 			clusters['body']=getNonOverlapingPoints(clusters['right'],clusters['body'],checkOnly=True)
 		else:	
 			logger.debug("Emptying Right Cluster")
@@ -955,7 +979,7 @@ def getClusterVoting2(distClusters,distCentroids,distances,delta,count,kinectFil
 	if getClusterPointOverlap([clusters['left']],[clusters['body']]) > 0.5:
 		center1,radius1=rikersBounding(clusters['left'])
 		center2,radius2=rikersBounding(clusters['body'])
-		if math.sqrt(getDist(center1,center2)) > 0.1:
+		if math.sqrt(getDist(center1,center2)) > 0.2:
 			clusters['body']=getNonOverlapingPoints(clusters['left'],clusters['body'],checkOnly=True)
 		else:
 			logger.debug("Emptying Left Cluster")
@@ -1107,7 +1131,6 @@ def chooseClusters(inFile,distances,kinectFile,saveDir=None,Multiview=False,azim
 						saveFigure(toPlot,pltTitle='Image-'+str(count),clustered=True,saveDir=saveDir,pltType='2d',Multiview=True,azimuths=azimuths,elevations=elevations)
 						logger.debug("Multiview set")
 					else:
-						toPlot=[x for x in toPlot.values() if x is not None]
 						saveFigure(toPlot,pltTitle='Image-'+str(count),clustered=True,saveDir=None,pltType='3d',axis=None)
 					'''
 					body=getNonOverlapingPoints(left,body,checkOnly=True)
@@ -1462,7 +1485,7 @@ def kinectFitData(inputFile):
 	#print(lf.shape,rf.shape,body.shape)
 	leftMu=np.mean(lf,axis=0)
 	leftSigma=np.cov(lf,rowvar=False)
-#	saveFigure([lf,rf,body],clustered=True)
+	#saveFigure([lf,rf,body],clustered=True)
 	rightMu=np.mean(rf,axis=0)
 	rightSigma=np.cov(rf,rowvar=False)
 	return lf,rf,body		
@@ -1478,9 +1501,10 @@ azimuths=[0,45,90,135,180,225,270,315,360]
 #cloudPointCluster('ali_23words/ali_students_02.txt',0.05,0,dist,'Gesture-'+str(dist),'3d','cluster','xy',)
 kinectFile='primitive_motions'
 #kinectFitData(kinectFile)
-#chooseClusters('ali_23words/ali_have_01.txt',distances,kinectFile)
-#trackClusters('7_1/riley_hand_1.txt',distances,kinectFile)
+chooseClusters('ali_23words/ali_have_02.txt',distances,kinectFile)
+#chooseClusters('test_7-17/riley_piano_01.txt',distances,kinectFile)
+#trackClusters('riley_23words/riley_actually_01.txt',distances,kinectFile)
 #getConvexHull(None)
-processFiles(inDir,saveDir,distances,kinectFile,True,elevations,azimuths)
+#processFiles(inDir,saveDir,distances,kinectFile,True,elevations,azimuths)
 #cloudPointParticle('test_12_06/riley_push0d_02_12_06_2019.txt')
 #rikersBounding(np.random.randn(10,3))
