@@ -26,6 +26,7 @@ logging.basicConfig(stream=sys.stderr,level=logging.INFO)
 logger=logging.getLogger('cloudPoint')
 from mpl_toolkits.mplot3d import proj3d
 from matplotlib.ticker import NullLocator
+import multiprocessing as mp
 
 '''
 Computes Moving average Takes two paramters
@@ -472,6 +473,8 @@ def cloudPointVisualize(inFile,inProximity,pointCount,pltTitle,saveDir=None,pltT
 def processFiles(inDir,saveDir,distances,kinectFile,Multiview=False,azimuths=None,elevations=None):
 	inFiles=glob.glob(inDir+'/*')
 	planes=['xy','yz','xz']
+	processes=[]
+	count=0
 	for inFile in inFiles:
 		name=inFile.strip().split('/')[-1]
 		dirName=name.split('_')[1]+name.split('_')[2].split('.')[0]
@@ -493,7 +496,19 @@ def processFiles(inDir,saveDir,distances,kinectFile,Multiview=False,azimuths=Non
 					os.mkdir(saveDir+'/'+dirName+'/'+plane)
 				except Exception as e:
 					logger.debug("Exceptions is :%s",e)
-			chooseClusters(inFile,distances,kinectFile,saveDir+'/'+dirName)
+			p=mp.Process(target=chooseClusters,args=(inFile,distances,kinectFile,saveDir+'/'+dirName,))
+			if count >	16:
+				for k in processes:
+					k.join()
+					processes=[]
+					count=0
+			p.start()
+			count+=1
+	if count > 0:
+		for k in processes:
+			k.join()
+		return
+
 
 
 def getDist(x1,x2):
@@ -1501,7 +1516,7 @@ azimuths=[0,45,90,135,180,225,270,315,360]
 #cloudPointCluster('ali_23words/ali_students_02.txt',0.05,0,dist,'Gesture-'+str(dist),'3d','cluster','xy',)
 kinectFile='primitive_motions'
 #kinectFitData(kinectFile)
-chooseClusters('ali_23words/ali_have_02.txt',distances,kinectFile)
+chooseClusters('du_test/du_assertion_01.txt',distances,kinectFile)
 #chooseClusters('test_7-17/riley_piano_01.txt',distances,kinectFile)
 #trackClusters('riley_23words/riley_actually_01.txt',distances,kinectFile)
 #getConvexHull(None)
