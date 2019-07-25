@@ -27,7 +27,8 @@ logger=logging.getLogger('cloudPoint')
 from mpl_toolkits.mplot3d import proj3d
 from matplotlib.ticker import NullLocator
 import multiprocessing as mp
-
+import io
+from PIL import Image
 '''
 Computes Moving average Takes two paramters
 @x Sequence to compute moving average on
@@ -467,9 +468,10 @@ def cloudPointVisualize(inFile,inProximity,pointCount,pltTitle,saveDir=None,pltT
 				data_z.append(line[2])
 				data_inten.append(line[3])
 
-def processFiles(inDir,saveDir,distances,kinectFile,Multiview=False,azimuths=None,elevations=None,anglePairs=None):
+def processFiles(inDir,saveDir,distances,kinectFile,Multiview=False,azimuths=None,elevations=None,anglePairs=None,separateHands=False,reSize=False):
 	inFiles=glob.glob(inDir+'/*')
 	planes=['xy','yz','xz']
+	bodyParts=['left','right','body']
 	processes=[]
 	count=0
 	for inFile in inFiles:
@@ -486,7 +488,14 @@ def processFiles(inDir,saveDir,distances,kinectFile,Multiview=False,azimuths=Non
 						os.mkdir(saveDir+'/'+dirName+'/'+str(azimuth)+'-'+str(elevation))
 					except Exception as e:
 						logger.debug("Exception is:%s",e)
-				chooseClusters(inFile,distances,kinectFile,saveDir+'/'+dirName,Multiview=Multiview,anglePairs=anglePairs)
+					p=mp.Process(target=chooseClusters,args=(inFile,distances,kinectFile,saveDir+'/'+dirName,Multiview,azimuths,elevations,False,None,anglePairs,))
+					if count > 16:
+						for k in processes:
+							k.join()
+							processes=[]
+							count=0
+					p.start()
+					count+=1
 			else:			
 				for azimuth in azimuths: 
 					for elevation in elevations:
@@ -501,8 +510,14 @@ def processFiles(inDir,saveDir,distances,kinectFile,Multiview=False,azimuths=Non
 					os.mkdir(saveDir+'/'+dirName+'/'+plane)
 				except Exception as e:
 					logger.debug("Exceptions is :%s",e)
-			p=mp.Process(target=chooseClusters,args=(inFile,distances,kinectFile,saveDir+'/'+dirName,))
-			if count >	0:
+				for part in bodyParts:
+					try:
+						os.mkdir(saveDir+'/'+dirName+'/'+plane+'/'+part)
+					except Exception as e:
+						logger.debug("Exceptions is :%s",e)
+					
+			p=mp.Process(target=chooseClusters,args=(inFile,distances,kinectFile,saveDir+'/'+dirName,Multiview,azimuths,elevations,False,None,anglePairs,separateHands,reSize))
+			if count >0:
 				for k in processes:
 					k.join()
 					processes=[]
@@ -539,7 +554,7 @@ def getClusters(x,dist):
 			centroids.append(np.mean(x_,axis=0))
 	return clusters,centroids
 
-def saveFigure(x,pltTitle='temp',clustered=False,saveDir=None,pltType='3d',axis=None,Multiview=False,elevations=None,azimuths=None,anglePairs=None,writetoFile=False,FileName=None):
+def saveFigure(x,pltTitle='temp',clustered=False,saveDir=None,pltType='3d',axis=None,Multiview=False,elevations=None,azimuths=None,anglePairs=None,writetoFile=False,FileName=None,separateHands=False,reSize=False,forPart=None):
 	if pltType !='3d':
 		plt.clf()
 	colors=['red','green','blue']
@@ -565,10 +580,10 @@ def saveFigure(x,pltTitle='temp',clustered=False,saveDir=None,pltType='3d',axis=
 		ax.set_xlim(0,2)
 		ax.set_ylim(-1,1)
 		ax.set_zlim(-1,1)
-		ax.grid(False)
-		ax.set_xticks([])
-		ax.set_yticks([])
-		ax.set_zticks([])
+		#ax.grid(False)
+		#ax.set_xticks([])
+		#ax.set_yticks([])
+		#ax.set_zticks([])
 		
 		if clustered:
 			if type(x) is list:
@@ -650,22 +665,22 @@ def saveFigure(x,pltTitle='temp',clustered=False,saveDir=None,pltType='3d',axis=
 		if axis=='xy' or axis == None:
 			ax.set_xlabel('x')
 			ax.set_ylabel('y')
-			ax.set_xlim(0,2)
-			ax.set_ylim(-1,1)
+			ax.set_xlim(0,1.5)
+			ax.set_ylim(-0.6,0.6)
 			i=0
 			j=1
 		elif axis == 'yz':
 			ax.set_xlabel('y')
 			ax.set_ylabel('z')
-			ax.set_xlim(-1,1)
-			ax.set_ylim(-1,1)
+			ax.set_xlim(-0.6,0.6)
+			ax.set_ylim(-0.6,0.6)
 			i=1
 			j=2
 		elif axis == 'xz':
 			ax.set_xlabel('x')
 			ax.set_ylabel('z')
 			ax.set_xlim(0,2)
-			ax.set_ylim(-1,1)
+			ax.set_ylim(-0.6,0.6)
 			i=0
 			j=2
 		if clustered:
@@ -676,7 +691,7 @@ def saveFigure(x,pltTitle='temp',clustered=False,saveDir=None,pltType='3d',axis=
 				if x['body'] is not None:
 					try:
 						ax.scatter(x['body'][:,i],x['body'][:,j],c='red',marker='o')
-					except:
+					except Exception as e:
 						logger.debug("Shape for body:%s",x['body'].shape)
 						exit(0)
 				if x['left'] is not None:
@@ -687,15 +702,35 @@ def saveFigure(x,pltTitle='temp',clustered=False,saveDir=None,pltType='3d',axis=
 						exit(0)
 				if x['right'] is not None:
 					try:
-						ax.scatter(x['right'][:,i],x['right'][:,j],c='blue',marker='o')
+						ax.scatter(x['right'][:,i],x['right'][:,j],c='blue',marker='o')				
 					except:
 						logger.debug("Shape for right:%s",x['right'].shape)
-						exit(0)
+						exit(0)				
 		else:
-			ax.scatter(x[:,i],x[:,j],c='r',marker='o')
-		if saveDir is None:
+			if x is None:
+				plt.clf()
+			else:
+				ax.scatter(x[:,i],x[:,j],c='r',marker='o')
+			if separateHands:
+				pltTitle=forPart+'/'+pltTitle
+			ax.set_axis_off()
+			plt.margins(0,0)
+			ax.xaxis.set_major_locator(NullLocator())
+			ax.yaxis.set_major_locator(NullLocator())
+			plt.ioff()
+			plt.axis('off')
+			if reSize:
+				ram=io.BytesIO()
+				plt.savefig(ram,format='jpeg')
+				im=Image.open(ram)
+				im=im.resize((100,75),Image.LANCZOS)	
+				im.save(saveDir+'/'+pltTitle+'.jpeg')
+				ram.close()
+			else:
+				plt.savefig(saveDir+'/'+pltTitle+'.jpeg')
+		if saveDir is None and not separateHands:
 			plt.show()
-		else:
+		elif not separateHands:
 			ax.set_axis_off()
 			plt.margins(0,0)
 			ax.xaxis.set_major_locator(NullLocator())
@@ -704,7 +739,8 @@ def saveFigure(x,pltTitle='temp',clustered=False,saveDir=None,pltType='3d',axis=
 			plt.axis('off')
 			plt.savefig(saveDir+'/'+pltTitle+'.jpeg')
 			plt.close()
-					
+		else:
+			plt.close()		
 def getHandClusterProb(hand,point):
 	'''
 	normal=multivariate_normal(mu,sigma)
@@ -1088,7 +1124,7 @@ def getClusterVoting2(distClusters,distCentroids,distances,delta,count,kinectFil
 	'''
 	return np.array(clusters['body']),np.array(clusters['right']),np.array(clusters['left'])
 
-def chooseClusters(inFile,distances,kinectFile,saveDir=None,Multiview=False,azimuths=None,elevations=None,writetoFile=False,FileName=None,anglePairs=None):
+def chooseClusters(inFile,distances,kinectFile,saveDir=None,Multiview=False,azimuths=None,elevations=None,writetoFile=False,FileName=None,anglePairs=None,separateHands=False,reSize=False):
 	inProximity=0.05
 	inFile=open(inFile,'r')
 	lines=inFile.readlines()
@@ -1171,7 +1207,8 @@ def chooseClusters(inFile,distances,kinectFile,saveDir=None,Multiview=False,azim
 					logger.debug("Chossen clusters body:%s,left:%s,right:%s",body.shape[0],left.shape[0],right.shape[0])
 					if saveDir is not None and not Multiview:
 						for axis in axes:
-							saveFigure(toPlot,pltTitle='Image-'+str(count),clustered=True,saveDir=saveDir+'/'+axis,pltType='2d',axis=axis)
+							for part in bodyParts:
+								saveFigure(toPlot[part],pltTitle='Image-'+str(count),clustered=False,saveDir=saveDir+'/'+axis,pltType='2d',axis=axis,separateHands=separateHands,reSize=reSize,forPart=part)
 					elif Multiview:
 						if anglePairs is not None:
 							saveFigure(toPlot,pltTitle='Image-'+str(count),clustered=True,saveDir=saveDir,pltType='2d',Multiview=True,anglePairs=anglePairs)
@@ -1430,7 +1467,7 @@ def cloudPointParticle(inFile):
 				bCentroids.append(bMean)
 				bClusters.append(bCluster)
 			if len(bCentroids) ==3:
-				bMean=np.mean(np.array(bCentroids),axis=0)
+				bMean=np.mean(np.array(bCentroids),axis=0)	
 				bCluster=np.concatenate((bClusters[0],bClusters[1],bClusters[2]),axis=0)
 				if bParticles is None: 
 					points=getUniformPoints(bMean,radius,N)
@@ -1554,9 +1591,9 @@ anglePairs=[(240,33),(37,33),(119,33)]
 kinectFile='primitive_motions'
 #kinectFitData(kinectFile)
 #chooseClusters('du_test/du_assertion_01.txt',distances,kinectFile)
-chooseClusters('arisa_23words/Arisa_wakeup_01.txt',distances,kinectFile,saveDir='temp',Multiview=True,anglePairs=anglePairs)
+#chooseClusters('ari_23words/Ari_teach_01.txt',distances,kinectFile,saveDir='temp',separateHands=True,reSize=True)
 #trackClusters('riley_23words/riley_actually_01.txt',distances,kinectFile)
 #getConvexHull(None)
-#processFiles(inDir,saveDir,distances,kinectFile,False,elevations,azimuths)
+processFiles(inDir,saveDir,distances,kinectFile,False,separateHands=True,reSize=True)
 #cloudPointParticle('test_12_06/riley_push0d_02_12_06_2019.txt')
 #rikersBounding(np.random.randn(10,3))
