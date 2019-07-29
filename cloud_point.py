@@ -569,6 +569,7 @@ def getClusters(x,dist):
 	return clusters,centroids
 
 def saveFigure(x,pltTitle='temp',clustered=False,saveDir=None,pltType='3d',axis=None,Multiview=False,elevations=None,azimuths=None,anglePairs=None,writetoFile=False,FileName=None,separateHands=False,reSize=False,forPart=None):
+	partSizes={'left':100,'righ':100,'body':150}
 	if pltType !='3d':
 		plt.clf()
 	colors=['red','green','blue']
@@ -581,7 +582,7 @@ def saveFigure(x,pltTitle='temp',clustered=False,saveDir=None,pltType='3d',axis=
 			for key in x.keys():
 				if x[key] is not None:
 					data=x[key]
-					f.write("For part: "+key+'\n')		
+					f.write("For part: "+key+'\n')
 					for i in range(data.shape[0]):
 						f.write(str(data[i][0])+','+str(data[i][1])+','+str(data[i][2])+'\n')
 			return
@@ -1138,6 +1139,14 @@ def getClusterVoting2(distClusters,distCentroids,distances,delta,count,kinectFil
 	'''
 	return np.array(clusters['body']),np.array(clusters['right']),np.array(clusters['left'])
 
+def getPadded(data,size):
+	if data is None:
+		return np.zeros((size, 3))
+	elif data.shape[0] == size:
+		return data
+	else:
+		return np.concatenate((data,np.zeros(((size-data.shape[0]),data.shape[1]))),axis=0)
+
 def chooseClusters(inFile,distances,kinectFile,saveDir=None,Multiview=False,azimuths=None,elevations=None,writetoFile=False,FileName=None,anglePairs=None,separateHands=False,reSize=False):
 	inProximity=0.05
 	inFile=open(inFile,'r')
@@ -1153,11 +1162,14 @@ def chooseClusters(inFile,distances,kinectFile,saveDir=None,Multiview=False,azim
 	currTime=None
 	procClusters=[]
 	currCentroids=[]
+	data_body=[]
+	data_left=[]
+	data_right=[]
 	currClusters={'body':None,'left':None,'right':None}
 	bodyParts=['left','right','body']
 	axes=['xy','yz','xz']
 	f=open("Maxpoints",'a')
-	maxPoints={'body':None,'left':None,'right':None}
+	maxPoints={'body':150,'left':100,'right':100}
 	for line in lines:
 		try:
 			line=[float(x.split('::')[1]) for x in line]
@@ -1189,20 +1201,6 @@ def chooseClusters(inFile,distances,kinectFile,saveDir=None,Multiview=False,azim
 							distClusters[dist].append(tempClusters[i])
 						distCentroids[dist]=sortedCentroids
 					body,right,left=getClusterVoting2(copy.deepcopy(distClusters),copy.deepcopy(distCentroids),distances,delta,count,kinectFile)
-					'''
-					for part in bodyParts:
-						if currClusters[part] is not None:
-							print(currClusters[part].shape,part)
-						if len(body)==0 and part == 'body' and currClusters[part] is not None:
-							if hasattr(getExistingClusters2(currClusters[part],x),"__iter__"):
-								body=getExistingClusters2(currClusters[part],x)
-						if len(left)==0 and part == 'left' and currClusters[part] is not None:
-							if hasattr(getExistingClusters2(currClusters[part],x),"__iter__"):
-								left=getExistingClusters2(currClusters[part],x)
-						if len(right)==0 and part == 'right' and currClusters[part] is not None:
-							if hasattr(getExistingClusters2(currClusters[part],x),"__iter__"):
-								right=getExistingClusters2(currClusters[part],x)
-					'''
 					toPlot={'left':None,'right':None,'body':None}
 					if len(left) > 0:
 						currClusters['left']=left
@@ -1220,7 +1218,7 @@ def chooseClusters(inFile,distances,kinectFile,saveDir=None,Multiview=False,azim
 					else:	
 						currClusters['body']=None
 					logger.debug("Chossen clusters body:%s,left:%s,right:%s",body.shape[0],left.shape[0],right.shape[0])
-					if saveDir is not None and not Multiview:
+					if saveDir is not None and not Multiview and not writetoFile:
 						for axis in axes:
 							for part in bodyParts:
 								saveFigure(toPlot[part],pltTitle='Image-'+str(count),clustered=False,saveDir=saveDir+'/'+axis,pltType='2d',axis=axis,separateHands=separateHands,reSize=reSize,forPart=part)
@@ -1231,48 +1229,13 @@ def chooseClusters(inFile,distances,kinectFile,saveDir=None,Multiview=False,azim
 							saveFigure(toPlot,pltTitle='Image-'+str(count),clustered=True,saveDir=saveDir,pltType='2d',Multiview=True,azimuths=azimuths,elevations=elevations)
 						logger.debug("Multiview set")
 					elif writetoFile:
-						if maxPoints['body'] is not None and toPlot['body'] is not None and toPlot['body'].shape[0] > maxPoints['body']:
-							maxPoints['body'] = toPlot['body'].shape[0]
-						elif toPlot['body'] is not None:
-							maxPoints['body'] = toPlot['body'].shape[0]
-						if maxPoints['left'] is not None and toPlot['left'] is not None and toPlot['left'].shape[0] > maxPoints['left']:
-							maxPoints['left'] = toPlot['left'].shape[0]
-						elif toPlot['left'] is not None:
-							maxPoints['left'] = toPlot['left'].shape[0]
-						if maxPoints['right'] is not None and toPlot['right'] is not None and toPlot['right'].shape[0] > maxPoints['right']:
-							maxPoints['right'] = toPlot['right'].shape[0]
-						elif toPlot['right'] is not None:
-							maxPoints['right'] = toPlot['right'].shape[0]
+						data_body.append(getPadded(toPlot['body'],maxPoints['body']))
+						data_left.append(getPadded(toPlot['left'], maxPoints['left']))
+						data_right.append(getPadded(toPlot['right'], maxPoints['right']))
 						#saveFigure(toPlot,pltTitle='Image-'+str(count),clustered=True,saveDir=saveDir,pltType='3d',writetoFile=writetoFile,FileName=FileName)
 						logger.debug("Write to File set")
 					else:
 						saveFigure(toPlot,pltTitle='Image-'+str(count),clustered=True,saveDir=None,pltType='3d',axis=None)
-					'''
-					body=getNonOverlapingPoints(left,body,checkOnly=True)
-					body=getNonOverlapingPoints(right,body,checkOnly=True)		
-					existingClusters=getExistingClusters(copy.deepcopy(distClusters),copy.deepcopy(distCentroids),currCentroids,currClusters,chosenCentroids,chosenClusters,delta,count)
-					chosenClusters=chosenClusters+existingClusters
-					
-					handClusters=[]
-					for chosen in chosenClusters:
-						if getHandClusterProb(leftMu,leftSigma,chosen) > 0.7 or getHandClusterProb(rightMu,rightSigma,chosen) > 0.7:
-							print("Left:",getHandClusterProb(leftMu,leftSigma,chosen),"Right:",getHandClusterProb(rightMu,rightSigma,chosen))
-							handClusters.append(chosen)
-					if len(handClusters) > 0:
-						for chosen in chosenClusters:
-							print("Left:",getHandClusterProb(leftMu,leftSigma,chosen),"Right:",getHandClusterProb(rightMu,rightSigma,chosen))
-					chosenPoints=[len(cluster) for cluster in chosenClusters]
-					currCentroids=[np.mean(np.array(clust),axis=0) for clust in chosenClusters]
-					currClusters=chosenClusters
-					logger.info("Time-stamp:%s, Chosen:%s, existing:%s",count,len(chosenClusters),len(existingClusters))
-					if len(handClusters)>0:
-#						getClusterVoting2(copy.deepcopy(distClusters),copy.deepcopy(distCentroids),distances,delta,count,leftMu,leftSigma,rightMu,rightSigma)
-			#			saveFigure(handClusters,pltTitle='Image-'+str(count),clustered=True,saveDir='temp',pltType='3d',axis='xy')
-					if count >10:
-						saveFigure(chosenClusters,pltTitle='Image-'+str(count),clustered=True,saveDir='temp',pltType='3d',axis='xy')
-					chosenClusters=[','.join([str(round(x,4)) for x in np.mean(clust,axis=0).tolist()]) for clust in chosenClusters]
-					#f.write(','.join(chosenClusters)+",TimeStep-"+str(count)+",Points:"+','.join([str(x) for x in chosenPoints])+'\n')
-					'''
 					count+=1
 					procClusters.pop(0)
 				procClusters.append(data)
@@ -1285,9 +1248,10 @@ def chooseClusters(inFile,distances,kinectFile,saveDir=None,Multiview=False,azim
 				data_x.append(line[0])
 				data_y.append(line[1])
 				data_z.append(line[2])
-	print("For file {}, Body count:{}, left count:{}, right count:{}  ".format(saveDir, maxPoints['body'],
-																				 maxPoints['left'], maxPoints['right']))
-	f.write("For file {}, Body count:{}, left count:{}, right count:{}  ".format(saveDir,maxPoints['body'],maxPoints['left'],maxPoints['right']))
+	if writetoFile:
+		np.save(saveDir+'_body',np.array(data_body))
+		np.save(saveDir+'_left',np.array(data_left))
+		np.save(saveDir+'_right',np.array(data_right))
 	return
 
 def checkSphere(point,center,radius):
@@ -1620,10 +1584,10 @@ anglePairs=[(240,33),(37,33),(119,33)]
 #cloudPointCluster('ali_23words/ali_students_02.txt',0.05,0,dist,'Gesture-'+str(dist),'3d','cluster','xy',)
 kinectFile='primitive_motions'
 #kinectFitData(kinectFile)
-#chooseClusters('riley_sentences/riley_IAmWorried_nonM_06.txt',distances,kinectFile,writetoFile=True)
+chooseClusters('riley_sentences_33/riley_wake_me_up_manual_01.txt',distances,kinectFile,saveDir="temp",writetoFile=True)
 #chooseClusters('ari_23words/Ari_teach_01.txt',distances,kinectFile,saveDir='temp',separateHands=True,reSize=True)
 #trackClusters('riley_23words/riley_actually_01.txt',distances,kinectFile)
 #getConvexHull(None)
-processFiles(inDir,saveDir,distances,kinectFile,False,writeToFile=True)
+#processFiles(inDir,saveDir,distances,kinectFile,False,writeToFile=True)
 #cloudPointParticle('test_12_06/riley_push0d_02_12_06_2019.txt')
 #rikersBounding(np.random.randn(10,3))
