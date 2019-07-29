@@ -468,7 +468,7 @@ def cloudPointVisualize(inFile,inProximity,pointCount,pltTitle,saveDir=None,pltT
 				data_z.append(line[2])
 				data_inten.append(line[3])
 
-def processFiles(inDir,saveDir,distances,kinectFile,Multiview=False,azimuths=None,elevations=None,anglePairs=None,separateHands=False,reSize=False):
+def processFiles(inDir,saveDir,distances,kinectFile,Multiview=False,azimuths=None,elevations=None,writeToFile=False,anglePairs=None,separateHands=False,reSize=False):
 	inFiles=glob.glob(inDir+'/*')
 	planes=['xy','yz','xz']
 	bodyParts=['left','right','body']
@@ -477,18 +477,32 @@ def processFiles(inDir,saveDir,distances,kinectFile,Multiview=False,azimuths=Non
 	for inFile in inFiles:
 		name=inFile.strip().split('/')[-1]
 		dirName=name.split('_')[1]+name.split('_')[2].split('.')[0]
-		try:
-			os.mkdir(saveDir+'/'+dirName)
-		except Exception as e:
-			logger.debug("Exceptions is :%s",e)		
-		if Multiview:
+		if "nonM" in name:
+			dirName=dirName+"nonM"
+		if not writeToFile:
+			try:
+				os.mkdir(saveDir+'/'+dirName)
+			except Exception as e:
+				logger.debug("Exceptions is :%s",e)
+		if writeToFile:
+			p = mp.Process(target=chooseClusters, args=(
+			inFile, distances, kinectFile, saveDir + '/' + dirName, Multiview, azimuths, elevations, writeToFile, None,
+			anglePairs,))
+			if count > 0:
+				for k in processes:
+					k.join()
+					processes = []
+					count = 0
+			p.start()
+			count += 1
+		elif Multiview:
 			if anglePairs:
 				for azimuth,elevation in anglePairs:
 					try:
 						os.mkdir(saveDir+'/'+dirName+'/'+str(azimuth)+'-'+str(elevation))
 					except Exception as e:
 						logger.debug("Exception is:%s",e)
-					p=mp.Process(target=chooseClusters,args=(inFile,distances,kinectFile,saveDir+'/'+dirName,Multiview,azimuths,elevations,False,None,anglePairs,))
+					p=mp.Process(target=chooseClusters,args=(inFile,distances,kinectFile,saveDir+'/'+dirName,Multiview,azimuths,elevations,writeToFile,None,anglePairs,))
 					if count > 16:
 						for k in processes:
 							k.join()
@@ -572,7 +586,7 @@ def saveFigure(x,pltTitle='temp',clustered=False,saveDir=None,pltType='3d',axis=
 						f.write(str(data[i][0])+','+str(data[i][1])+','+str(data[i][2])+'\n')
 			return
 		fig=plt.figure()
-		#fig.suptitle(pltTitle,fontsize=20)
+		fig.suptitle(pltTitle,fontsize=20)
 		ax=fig.add_subplot(111,projection='3d')
 		ax.set_xlabel('x')
 		ax.set_ylabel('y')
@@ -1140,9 +1154,10 @@ def chooseClusters(inFile,distances,kinectFile,saveDir=None,Multiview=False,azim
 	procClusters=[]
 	currCentroids=[]
 	currClusters={'body':None,'left':None,'right':None}
-	f=open('choosen-clusters','w')
 	bodyParts=['left','right','body']
 	axes=['xy','yz','xz']
+	f=open("Maxpoints",'a')
+	maxPoints={'body':None,'left':None,'right':None}
 	for line in lines:
 		try:
 			line=[float(x.split('::')[1]) for x in line]
@@ -1216,7 +1231,19 @@ def chooseClusters(inFile,distances,kinectFile,saveDir=None,Multiview=False,azim
 							saveFigure(toPlot,pltTitle='Image-'+str(count),clustered=True,saveDir=saveDir,pltType='2d',Multiview=True,azimuths=azimuths,elevations=elevations)
 						logger.debug("Multiview set")
 					elif writetoFile:
-						saveFigure(toPlot,pltTitle='Image-'+str(count),clustered=True,saveDir=saveDir,pltType='3d',writetoFile=writetoFile,FileName=FileName)
+						if maxPoints['body'] is not None and toPlot['body'] is not None and toPlot['body'].shape[0] > maxPoints['body']:
+							maxPoints['body'] = toPlot['body'].shape[0]
+						elif toPlot['body'] is not None:
+							maxPoints['body'] = toPlot['body'].shape[0]
+						if maxPoints['left'] is not None and toPlot['left'] is not None and toPlot['left'].shape[0] > maxPoints['left']:
+							maxPoints['left'] = toPlot['left'].shape[0]
+						elif toPlot['left'] is not None:
+							maxPoints['left'] = toPlot['left'].shape[0]
+						if maxPoints['right'] is not None and toPlot['right'] is not None and toPlot['right'].shape[0] > maxPoints['right']:
+							maxPoints['right'] = toPlot['right'].shape[0]
+						elif toPlot['right'] is not None:
+							maxPoints['right'] = toPlot['right'].shape[0]
+						#saveFigure(toPlot,pltTitle='Image-'+str(count),clustered=True,saveDir=saveDir,pltType='3d',writetoFile=writetoFile,FileName=FileName)
 						logger.debug("Write to File set")
 					else:
 						saveFigure(toPlot,pltTitle='Image-'+str(count),clustered=True,saveDir=None,pltType='3d',axis=None)
@@ -1258,7 +1285,10 @@ def chooseClusters(inFile,distances,kinectFile,saveDir=None,Multiview=False,azim
 				data_x.append(line[0])
 				data_y.append(line[1])
 				data_z.append(line[2])
-	return	
+	print("For file {}, Body count:{}, left count:{}, right count:{}  ".format(saveDir, maxPoints['body'],
+																				 maxPoints['left'], maxPoints['right']))
+	f.write("For file {}, Body count:{}, left count:{}, right count:{}  ".format(saveDir,maxPoints['body'],maxPoints['left'],maxPoints['right']))
+	return
 
 def checkSphere(point,center,radius):
 	return ((center[0]-point[0])**2+(center[1]-point[1])**2+(center[2]-point[2])**2) < (radius)**2
@@ -1590,10 +1620,10 @@ anglePairs=[(240,33),(37,33),(119,33)]
 #cloudPointCluster('ali_23words/ali_students_02.txt',0.05,0,dist,'Gesture-'+str(dist),'3d','cluster','xy',)
 kinectFile='primitive_motions'
 #kinectFitData(kinectFile)
-#chooseClusters('du_test/du_assertion_01.txt',distances,kinectFile)
+#chooseClusters('riley_sentences/riley_IAmWorried_nonM_06.txt',distances,kinectFile,writetoFile=True)
 #chooseClusters('ari_23words/Ari_teach_01.txt',distances,kinectFile,saveDir='temp',separateHands=True,reSize=True)
 #trackClusters('riley_23words/riley_actually_01.txt',distances,kinectFile)
 #getConvexHull(None)
-processFiles(inDir,saveDir,distances,kinectFile,False,separateHands=True,reSize=True)
+processFiles(inDir,saveDir,distances,kinectFile,False,writeToFile=True)
 #cloudPointParticle('test_12_06/riley_push0d_02_12_06_2019.txt')
 #rikersBounding(np.random.randn(10,3))
