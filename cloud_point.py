@@ -3,6 +3,7 @@ import glob
 import os
 import matplotlib.pyplot as plt
 import datetime
+from string import digits
 from mpl_toolkits.mplot3d import Axes3D
 from sklearn.cluster import DBSCAN
 from sklearn import metrics
@@ -468,56 +469,47 @@ def cloudPointVisualize(inFile,inProximity,pointCount,pltTitle,saveDir=None,pltT
 				data_z.append(line[2])
 				data_inten.append(line[3])
 
+def perProcessCall(inFiles,saveDirs,func,args):
+	for i,inFile in enumerate(inFiles):
+		args[2]=saveDirs[i]
+		args.insert(0,inFile)
+		args=tuple(args)
+		func(*args)
+
 def processFiles(inDir,saveDir,distances,kinectFile,Multiview=False,azimuths=None,elevations=None,writeToFile=False,anglePairs=None,separateHands=False,reSize=False):
 	inFiles=glob.glob(inDir+'/*')
 	planes=['xy','yz','xz']
 	bodyParts=['left','right','body']
 	processes=[]
 	count=0
+	fileCount=15
+	funcName=chooseClusters
+	saveDirs=[]
 	for inFile in inFiles:
 		name=inFile.strip().split('/')[-1]
 		dirName=name.split('_')[1]+name.split('_')[2].split('.')[0]
 		if "nonM" in name:
 			dirName=dirName+"nonM"
+		saveDirs.append(saveDir+'/'+dirName)
 		if not writeToFile:
 			try:
 				os.mkdir(saveDir+'/'+dirName)
 			except Exception as e:
 				logger.debug("Exceptions is :%s",e)
-		if writeToFile:
-			p = mp.Process(target=chooseClusters, args=(
-			inFile, distances, kinectFile, saveDir + '/' + dirName, Multiview, azimuths, elevations, writeToFile, None,
-			anglePairs,))
-			if count > 0:
-				for k in processes:
-					k.join()
-					processes = []
-					count = 0
-			p.start()
-			count += 1
-		elif Multiview:
+		if Multiview:
 			if anglePairs:
 				for azimuth,elevation in anglePairs:
 					try:
 						os.mkdir(saveDir+'/'+dirName+'/'+str(azimuth)+'-'+str(elevation))
 					except Exception as e:
 						logger.debug("Exception is:%s",e)
-					p=mp.Process(target=chooseClusters,args=(inFile,distances,kinectFile,saveDir+'/'+dirName,Multiview,azimuths,elevations,writeToFile,None,anglePairs,))
-					if count > 16:
-						for k in processes:
-							k.join()
-							processes=[]
-							count=0
-					p.start()
-					count+=1
 			else:			
 				for azimuth in azimuths: 
 					for elevation in elevations:
 						try:
 							os.mkdir(saveDir+'/'+dirName+'/'+str(azimuth)+'-'+str(elevation))
 						except Exception as e:
-							logger.debug("Exception is:%s",e)	
-				chooseClusters(inFile,distances,kinectFile,saveDir+'/'+dirName,Multiview,azimuths,elevations)
+							logger.debug("Exception is:%s",e)
 		else:
 			for plane in planes:
 				try:
@@ -529,8 +521,32 @@ def processFiles(inDir,saveDir,distances,kinectFile,Multiview=False,azimuths=Non
 						os.mkdir(saveDir+'/'+dirName+'/'+plane+'/'+part)
 					except Exception as e:
 						logger.debug("Exceptions is :%s",e)
-					
-			p=mp.Process(target=chooseClusters,args=(inFile,distances,kinectFile,saveDir+'/'+dirName,Multiview,azimuths,elevations,False,None,anglePairs,separateHands,reSize))
+	for i in range(0,len(inFiles),fileCount):
+		if writeToFile:
+			currArgs=[distances, kinectFile, 'tempDir', Multiview, azimuths, elevations, writeToFile, None,anglePairs]
+			p = mp.Process(target=perProcessCall, args=(inFiles[i:i+fileCount],saveDirs,funcName,currArgs))
+			if count > 0:
+				for k in processes:
+					k.join()
+					processes = []
+					count = 0
+			p.start()
+			count += 1
+		elif Multiview:
+			if anglePairs:
+				for azimuth,elevation in anglePairs:
+					currArgs=[distances,kinectFile,'tempDir',Multiview,azimuths,elevations,writeToFile,None,anglePairs]	
+					p=mp.Process(target=perProcessCall,args=(inFiles[i:i+fileCount],saveDirs,funcName,currArgs))
+					if count > 16:
+						for k in processes:
+							k.join()
+							processes=[]
+							count=0
+					p.start()
+					count+=1
+		else:
+			currArgs=[distances,kinectFile,'tempDir',Multiview,azimuths,elevations,False,None,anglePairs,separateHands,reSize]
+			p=mp.Process(target=perProcessCall,args=(inFiles[i:i+fileCount],saveDirs,funcName,currArgs))
 			if count >0:
 				for k in processes:
 					k.join()
@@ -725,7 +741,7 @@ def saveFigure(x,pltTitle='temp',clustered=False,saveDir=None,pltType='3d',axis=
 			if x is None:
 				plt.clf()
 			else:
-				ax.scatter(x[:,i],x[:,j],c='r',marker='o')
+				ax.scatter(x[:,i],x[:,j],c='black',marker='o')
 			if separateHands:
 				pltTitle=forPart+'/'+pltTitle
 			ax.set_axis_off()
@@ -738,8 +754,9 @@ def saveFigure(x,pltTitle='temp',clustered=False,saveDir=None,pltType='3d',axis=
 				ram=io.BytesIO()
 				plt.savefig(ram,format='jpeg')
 				im=Image.open(ram)
-				im=im.resize((100,75),Image.LANCZOS)	
-				im.save(saveDir+'/'+pltTitle+'.jpeg')
+				im=im.convert('LA')
+				im=im.resize((40,29),Image.LANCZOS)	
+				im.save(saveDir+'/'+pltTitle+'.png')
 				ram.close()
 			else:
 				plt.savefig(saveDir+'/'+pltTitle+'.jpeg')
@@ -1522,6 +1539,21 @@ def plotMultipleDists(distances,target):
 		count+=1
 		p.start()
 
+def checkFiles(inDir):
+	inFiles=glob.glob(inDir+'/*')
+	count={}
+	rm_dig=str.maketrans('','',digits)
+	for inFile in inFiles:
+		name=inFile.translate(rm_dig)
+		try:
+			count[name]+=1
+		except:
+			count[name]=1
+
+	for key,val in count.items():
+		if val != 20:
+			print(key,val)
+	print(len(count.keys()))
 '''
 Kinect Joints
 3- Head joint
@@ -1584,10 +1616,11 @@ anglePairs=[(240,33),(37,33),(119,33)]
 #cloudPointCluster('ali_23words/ali_students_02.txt',0.05,0,dist,'Gesture-'+str(dist),'3d','cluster','xy',)
 kinectFile='primitive_motions'
 #kinectFitData(kinectFile)
-chooseClusters('riley_sentences_33/riley_wake_me_up_manual_01.txt',distances,kinectFile,saveDir="temp",writetoFile=True)
+#chooseClusters('riley_sentences_33/riley_one_piano_two_books_side_01.txt',distances,kinectFile)
+#checkFiles('/mnt/d/impactProject/riley_sentences_33')
 #chooseClusters('ari_23words/Ari_teach_01.txt',distances,kinectFile,saveDir='temp',separateHands=True,reSize=True)
 #trackClusters('riley_23words/riley_actually_01.txt',distances,kinectFile)
 #getConvexHull(None)
-#processFiles(inDir,saveDir,distances,kinectFile,False,writeToFile=True)
+processFiles(inDir,saveDir,distances,kinectFile,False,separateHands=True,reSize=True)
 #cloudPointParticle('test_12_06/riley_push0d_02_12_06_2019.txt')
 #rikersBounding(np.random.randn(10,3))
