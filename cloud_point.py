@@ -2,7 +2,7 @@ import numpy as np
 import glob
 import os
 import matplotlib
-matplotlib.use('Agg')
+#matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import datetime
 from string import digits
@@ -32,6 +32,7 @@ from matplotlib.ticker import NullLocator
 import multiprocessing as mp
 import io
 from PIL import Image
+
 '''
 Computes Moving average Takes two paramters
 @x Sequence to compute moving average on
@@ -491,40 +492,41 @@ def processFiles(inDir,saveDir,distances,kinectFile,Multiview=False,azimuths=Non
 	funcName=chooseClusters
 	saveDirs=[]
 	for inFile in inFiles:
+		user=inFile.strip().split('/')[-1].split('_')[0]
 		name=inFile.strip().split('/')[-1]
 		dirName=name.split('_')[1]+name.split('_')[2].split('.')[0]
 		if "nonM" in name:
 			dirName=dirName+"nonM"
-		saveDirs.append(saveDir+'/'+dirName)
+		saveDirs.append(saveDir+'/'+user+'_'+dirName)
 		if not writeToFile:
 			try:
-				os.mkdir(saveDir+'/'+dirName)
+				os.mkdir(saveDir+'/'+user+'_'+dirName)
 			except Exception as e:
 				logger.debug("Exceptions is :%s",e)
 		if Multiview:
 			if anglePairs:
 				for azimuth,elevation in anglePairs:
 					try:
-						os.mkdir(saveDir+'/'+dirName+'/'+str(azimuth)+'-'+str(elevation))
+						os.mkdir(saveDir+'/'+user+'_'+dirName+'/'+str(azimuth)+'-'+str(elevation))
 					except Exception as e:
 						logger.debug("Exception is:%s",e)
 			else:			
 				for azimuth in azimuths: 
 					for elevation in elevations:
 						try:
-							os.mkdir(saveDir+'/'+dirName+'/'+str(azimuth)+'-'+str(elevation))
+							os.mkdir(saveDir+'/'+user+'_'+dirName+'/'+str(azimuth)+'-'+str(elevation))
 						except Exception as e:
 							logger.debug("Exception is:%s",e)
 		else:
 			if not saveNumpy:
 				for plane in planes:
 					try:
-						os.mkdir(saveDir+'/'+dirName+'/'+plane)
+						os.mkdir(saveDir+'/'+user+'_'+dirName+'/'+plane)
 					except Exception as e:
 						logger.debug("Exceptions is :%s",e)
 					for part in bodyParts:
 						try:
-							os.mkdir(saveDir+'/'+dirName+'/'+plane+'/'+part)
+							os.mkdir(saveDir+'/'+user+'_'+dirName+'/'+plane+'/'+part)
 						except Exception as e:
 							logger.debug("Exceptions is :%s",e)
 	for i in range(0,len(inFiles),fileCount):
@@ -760,7 +762,7 @@ def saveFigure(x,pltTitle='temp',clustered=False,saveDir=None,pltType='3d',axis=
 				ram=io.BytesIO()
 				plt.savefig(ram,format='jpeg')
 				im=Image.open(ram)
-				im=im.convert('LA')
+				im=im.convert('1')
 				im=im.resize((40,29),Image.LANCZOS)	
 				if saveNumpy:
 					ram.close()
@@ -1177,7 +1179,11 @@ def getPadded(data,size):
 def chooseClusters(inFile,distances,kinectFile,saveDir=None,Multiview=False,azimuths=None,elevations=None,writetoFile=False,FileName=None,anglePairs=None,separateHands=False,reSize=False,saveNumpy=False):
 	inProximity=0.05
 	inFile=open(inFile,'r')
-	lines=inFile.readlines()
+	try:
+		lines=inFile.readlines()
+	except:
+		print("Couldn't read file {}".format(inFile))
+		return
 	lines=[line.strip().split(' ') for line in lines]
 	data_x=[]
 	data_y=[]
@@ -1288,7 +1294,8 @@ def chooseClusters(inFile,distances,kinectFile,saveDir=None,Multiview=False,azim
 	if saveNumpy:
 		for axis in axes:
 			for part in bodyParts:
-				np.save(saveDir+'/'+axis+'-'+part,npArrays[axis+'-'+part])
+				print(np.array(npArrays[axis+'-'+part]).shape)
+				np.save(saveDir+'/'+axis+'-'+part,np.array(npArrays[axis+'-'+part]))
 		print("Done saving")
 	return
 
