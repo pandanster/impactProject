@@ -5,6 +5,7 @@ from string import digits
 import numpy as np
 import torch
 import logging 
+from sklearn.metrics import accuracy_score,confusion_matrix
 
 def doMultiProcessing(inFunc,inDir,split,arguments,noJobs=16):
 	processes=[]
@@ -56,11 +57,11 @@ def createTrainTest(userDirs,users,testCount,outFile,classes):
 	for userDir in userDirs:
 		inFiles=glob.glob(userDir+'/*')
 		for inFile in inFiles:
-			user=getLower(getUser(inFile))	
-			label=getLabel(inFile,withCount=False)
+			user=getLower(getUser(inFile))
+			label=getLabel(inFile)
 			if label not in classes:
 				continue
-			if classCount[user+'-'+label] < testCount and testCount > 0:
+			if classCount[user+'-'+label] < testCount:
 				out.write("Test , {}\n".format(inFile.split('/')[-1]))
 				classCount[user+'-'+label]+=1
 			else:
@@ -131,3 +132,6 @@ def createLogger(inDir,logFile):
 		format="%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s]  %(message)s",
 		handlers=[logging.FileHandler("{0}/{1}.log".format(inDir, logFile)),logging.StreamHandler()])
 	return logging.getLogger()
+
+def computeAccuracy(labels,predictions,classes):
+	return confusion_matrix(labels,predictions,classes),accuracy_score(labels,predictions)
