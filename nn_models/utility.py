@@ -56,11 +56,11 @@ def createTrainTest(userDirs,users,testCount,outFile,classes):
 	for userDir in userDirs:
 		inFiles=glob.glob(userDir+'/*')
 		for inFile in inFiles:
-			user=getLower(getUser(inFile))
-			label=getLabel(inFile)
+			user=getLower(getUser(inFile))	
+			label=getLabel(inFile,withCount=False)
 			if label not in classes:
 				continue
-			if classCount[user+'-'+label] < testCount:
+			if classCount[user+'-'+label] < testCount and testCount > 0:
 				out.write("Test , {}\n".format(inFile.split('/')[-1]))
 				classCount[user+'-'+label]+=1
 			else:
@@ -105,6 +105,7 @@ class multiViewDataset(Dataset):
 		for inDir in inDirs:
 			npFiles=glob.glob(inDir+'/*')
 			npFiles=sorted(npFiles)
+			data_set=False
 			for i in range(0,len(npFiles),3):
 				view=npFiles[i].split('/')[-1].split('-')[0]
 				body=np.load(npFiles[i])
@@ -119,7 +120,9 @@ class multiViewDataset(Dataset):
 				else:
 					start=0
 				data[view].append(np.concatenate((body[start:start+self.frameCount],left[start:start+self.frameCount],right[start:start+self.frameCount]),axis=0))
-			labels.append(self.classes.index(getLabel(inDir,self.classes)))
+				data_set=True
+			if data_set:
+				labels.append(self.classes.index(getLabel(inDir,self.classes)))
 		return data,labels
 
 
