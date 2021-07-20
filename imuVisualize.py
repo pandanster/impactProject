@@ -124,10 +124,12 @@ def sensorDataVisualize(inFile,plotType=None,smooth=False,window=None):
 				ax.plot(movingAvg(inFile[:,i].tolist(),window),label='x')
 				ax.plot(movingAvg(inFile[:,i+1].tolist(),window),label='y')
 				ax.plot(movingAvg(inFile[:,i+2].tolist(),window),label='z')
+				ax.grid()
 			else:
 				ax.plot(inFile[:,i],label='x')
 				ax.plot(inFile[:,i+1],label='y')
 				ax.plot(inFile[:,i+2],label='z')
+				ax.grid()
 			plt.legend()
 			plt.show()
 
@@ -140,7 +142,7 @@ The parameter 2 is the frequency for which you are filtering
 The parameter 5 is your sampling rate
 '''
 def FilterExample(inFile):
-	b1,a1=build_filter(6,2,None,'lowpass',100,'ellip',.01,30)
+	b1,a1=build_filter(8,5,None,'lowpass',100,'ellip',.01,30)
 	inFile=open(inFile,'r')
 	inFile=inFile.readlines()
 	inFile=inFile[1:]
@@ -161,5 +163,5 @@ def FilterExample(inFile):
 	plt.show()
 
 			
-#sensorDataVisualize('Sensor_record_20190515_161127_AndroSensor.csv',plotType='3D',smooth=True,window=10)
-FilterExample('Sensor_record_20190515_161127_AndroSensor.csv')
+sensorDataVisualize('Sensor_record_20190515_161127_AndroSensor.csv',plotType=None,smooth=True,window=10)
+# FilterExample('Sensor_record_20190515_161127_AndroSensor.csv')
