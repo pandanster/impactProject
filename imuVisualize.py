@@ -3,6 +3,69 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from sklearn import metrics
 from scipy.signal import spectrogram, iirfilter,freqz,decimate,filtfilt,correlate
+from sklearn import tree 
+import glob
+import io 
+import pydotplus
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.tree import export_graphviz
+
+'''
+Computes the mean of the data sample
+@input array of any dimension
+returns the flat mean of the given array
+'''
+def getMean(data):
+	result = np.mean(data)
+	return result
+
+'''
+Computes the mean of the X, Y, and z axis of the IMU
+@datax array corresponding to the x axis of the data
+@datay array corresponding to the y axis of the data
+@dataz array corresponding to the z axis of the array
+returns the mean over the summation of the x, y, and z axis
+'''
+def getTotalMean(datax, datay, dataz):
+	data = datax + datay + dataz
+	result = np.mean(data)
+	return result
+'''
+Computes the area under a curve, define as the sum of values under the curve
+@data array of any dimension
+returns the sum of the array
+'''
+def getArea(data):
+	result = np.sum(data)
+	return result 
+'''
+Computes the distribution that is the range of data along the three axis
+@datax data corresponding to the x axis 
+@datay data corresponding to the y axis
+@dataz data corresponding to the z axis
+returns the distribution along the three axis 
+'''
+def getPostureDist(datax, datay, dataz):
+	diffxy = datax - datay
+	diffxz = datax - dataz
+	diffyz = datay - dataz
+	return [diffxy, diffxz, diffyz]
+'''
+Computes the absolute mean
+@data input array of any dimension
+returns the absolute mean on the flattened data 
+'''
+def getAbsMean(data):
+	result = np.mean(np.abs(data))
+	return result
+'''
+Computes the absolute area under the curve
+@data array of any dimension
+returns the absolute area under the curve
+'''
+def getAbsArea(data):
+	result = np.sum(np.abs(data))
+	return result	
 
 '''
 Computes Moving average Takes two paramters
@@ -83,7 +146,78 @@ def build_filter(Order,pass_band,stop_band,band,fs,filter,ripple,attenuation,plo
 		plt.show()
 	return (b,a)
 		
-				
+'''
+Builds a decision tree classifer using the training data and labels for the given depth
+@trainData features for the training data
+@trainLabels integer labels corresponding the training data
+@depth Depth of the tree
+returns the decision tree
+'''
+def buildTree(trainData,trainLabels,depth):
+	dtc= DecisionTreeClassifier(max_depth=depth)
+	dtc.fit(trainData,trainLabels)
+	return dtc
+
+'''
+Can be used to print the decision tree
+@dtree The decision Tree built using buildTree
+@features Feature names like area, mean, etc.
+Saves an image file in the current directory corresponding to the built tree
+'''
+def printTree(dtree,features):
+	dotfile=io.StringIO()
+	export_graphviz(decision_tree=dtree,feature_names=features,out_file=dotfile,class_names=['alarm','call'])
+	graph=pydotplus.graph_from_dot_data(dotfile.getvalue())
+	graph.write_png("dtree.png")
+
+'''
+Create Features for the inputFile
+@inFile the input file name
+returns two features Area and Mean
+'''
+
+def getFeatures(inFile):
+	inFile=open(inFile,'r')
+	inFile=inFile.readlines()
+	inFile=inFile[1:]
+	inFile=[f.strip().split(',') for f in inFile]
+	inFile=[[float(x) for x in f[:-1]] for f in inFile]
+	inFile=np.array(inFile)
+	return getArea(inFile),getMean(inFile)
+'''
+Takes the two training and test Directories, builds a decision Tree classifier using training Files and predicts on the testing File
+@trainDir Directory containging the training files
+@testDir Directory containing the test files
+You can control the depth of the tree using the depth parameter to the function call buildTree
+prints the predictions for the test files
+'''
+def trainAndPredict(trainDir,testDir):
+	trainLabels=[]
+	testLabels=[]
+	trainData=[]
+	testData=[]
+	labels=['alarm','call'] #labels for your classes
+	trainFiles=glob.glob(trainDir+'/*')				
+	testFiles=glob.glob(testDir+'/*')
+	for trainFile in trainFiles:
+		feat1,feat2=getFeatures(trainFile) # Obtain the features for the current input File
+		trainData.append([feat1,feat2])
+		if 'alarm' in trainFile:
+			trainLabels.append(labels.index('alarm')) # The labels should be integers for the classifier, so we convert the strin label to its corresponding list index 
+		elif 'call' in trainFile:
+			trainLabels.append(labels.index('call'))
+	for testFile in testFiles:
+		feat1,feat2=getFeatures(testFile)
+		testData.append([feat1,feat2])
+		if 'alarm' in testFile:
+			testLabels.append(labels.index('alarm'))
+		elif 'call' in testFile:
+			testLabels.append(labels.index('call'))
+	dtc=buildTree(trainData,trainLabels,depth=1) #Build the decision tree of depth 1
+	#printTree(dtc,['Area','Mean'])
+	print("These are the predicted Labels {}".format([labels[int(x)] for x in list(dtc.predict(testData))])) #Convert the predicted integer classes to their corresponding string labels
+	print("These are the true Labels {}".format([labels[int(x)] for x in list(testLabels)]))
+	exit(0)
 '''
 Takes five parameters
 @param inFile - The input File that contains the captured data
@@ -162,6 +296,6 @@ def FilterExample(inFile):
 	plt.legend()
 	plt.show()
 
-			
-sensorDataVisualize('Sensor_record_20190515_161127_AndroSensor.csv',plotType=None,smooth=True,window=10)
+trainAndPredict('./data_dir/train/','./data_dir/test/')			
+#sensorDataVisualize('Sensor_record_20190515_161127_AndroSensor.csv',plotType=None,smooth=True,window=200)
 # FilterExample('Sensor_record_20190515_161127_AndroSensor.csv')
