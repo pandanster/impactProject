@@ -231,7 +231,7 @@ def trainAndPredict(trainDir,testDir):
 Takes the two training and test Directories, builds a SVM classifier using training Files and predicts on the testing File
 @trainDir Directory containging the training files
 @testDir Directory containing the test files
-You can control the depth of the tree using the depth parameter to the function call buildTree
+You can change the regularization parameter C and the type of kernel
 prints the predictions for the test files
 '''
 def trainAndPredictSVM(trainDir,testDir):
