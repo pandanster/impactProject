@@ -6,9 +6,11 @@ from scipy.signal import spectrogram, iirfilter,freqz,decimate,filtfilt,correlat
 from sklearn import tree 
 import glob
 import io 
-import pydotplus
+#import pydotplus
 from sklearn.tree import DecisionTreeClassifier
-from sklearn.tree import export_graphviz
+from sklearn import svm
+
+#from sklearn.tree import export_graphviz
 
 '''
 Computes the mean of the data sample
@@ -158,6 +160,11 @@ def buildTree(trainData,trainLabels,depth):
 	dtc.fit(trainData,trainLabels)
 	return dtc
 
+def buildSVM(trainData,trainLabels,kernel='linear',C=0.05):
+	clf=svm.SVC(kernel=kernel,C=C)
+	clf.fit(trainData,trainLabels)
+	return clf
+
 '''
 Can be used to print the decision tree
 @dtree The decision Tree built using buildTree
@@ -184,6 +191,7 @@ def getFeatures(inFile):
 	inFile=[[float(x) for x in f[:-1]] for f in inFile]
 	inFile=np.array(inFile)
 	return getArea(inFile),getMean(inFile)
+
 '''
 Takes the two training and test Directories, builds a decision Tree classifier using training Files and predicts on the testing File
 @trainDir Directory containging the training files
@@ -218,6 +226,42 @@ def trainAndPredict(trainDir,testDir):
 	print("These are the predicted Labels {}".format([labels[int(x)] for x in list(dtc.predict(testData))])) #Convert the predicted integer classes to their corresponding string labels
 	print("These are the true Labels {}".format([labels[int(x)] for x in list(testLabels)]))
 	exit(0)
+
+'''
+Takes the two training and test Directories, builds a SVM classifier using training Files and predicts on the testing File
+@trainDir Directory containging the training files
+@testDir Directory containing the test files
+You can control the depth of the tree using the depth parameter to the function call buildTree
+prints the predictions for the test files
+'''
+def trainAndPredictSVM(trainDir,testDir):
+	trainLabels=[]
+	testLabels=[]
+	trainData=[]
+	testData=[]
+	labels=['alarm','call'] #labels for your classes
+	trainFiles=glob.glob(trainDir+'/*')				
+	testFiles=glob.glob(testDir+'/*')
+	for trainFile in trainFiles:
+		feat1,feat2=getFeatures(trainFile) # Obtain the features for the current input File
+		trainData.append([feat1,feat2])
+		if 'alarm' in trainFile:
+			trainLabels.append(labels.index('alarm')) # The labels should be integers for the classifier, so we convert the strin label to its corresponding list index 
+		elif 'call' in trainFile:
+			trainLabels.append(labels.index('call'))
+	for testFile in testFiles:
+		feat1,feat2=getFeatures(testFile)
+		testData.append([feat1,feat2])
+		if 'alarm' in testFile:
+			testLabels.append(labels.index('alarm'))
+		elif 'call' in testFile:
+			testLabels.append(labels.index('call'))
+	dtc=buildSVM(trainData,trainLabels) #Build the decision tree of depth 1
+	#printTree(dtc,['Area','Mean'])
+	print("These are the predicted Labels {}".format([labels[int(x)] for x in list(dtc.predict(testData))])) #Convert the predicted integer classes to their corresponding string labels
+	print("These are the true Labels {}".format([labels[int(x)] for x in list(testLabels)]))
+	exit(0)
+
 '''
 Takes five parameters
 @param inFile - The input File that contains the captured data
@@ -296,6 +340,7 @@ def FilterExample(inFile):
 	plt.legend()
 	plt.show()
 
-trainAndPredict('./data_dir/train/','./data_dir/test/')			
+# trainAndPredict('./data_dir/train/','./data_dir/test/')			
+trainAndPredictSVM('./data_dir/train/','./data_dir/test/')			
 #sensorDataVisualize('Sensor_record_20190515_161127_AndroSensor.csv',plotType=None,smooth=True,window=200)
 # FilterExample('Sensor_record_20190515_161127_AndroSensor.csv')
